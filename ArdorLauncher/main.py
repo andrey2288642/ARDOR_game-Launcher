@@ -72,7 +72,17 @@ from PyQt6.QtGui import (
     QMouseEvent,
     QPixmap,
 )
-from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer, QSoundEffect
+try:
+    from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer, QSoundEffect
+
+    MULTIMEDIA_AVAILABLE: bool = True
+except ImportError as _mm_err:  # PyQt6-Multimedia не установлен — работаем без звука
+    QAudioOutput = None  # type: ignore[assignment,misc]
+    QMediaPlayer = None  # type: ignore[assignment,misc]
+    QSoundEffect = None  # type: ignore[assignment,misc]
+    MULTIMEDIA_AVAILABLE = False
+    log.warning("PyQt6-Multimedia недоступен (%s) — запуск без аудио.", _mm_err)
+
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
@@ -524,25 +534,35 @@ class AudioEngine(QObject):
         super().__init__(parent)
         self.storage = storage
         self._audio_dir = ASSETS_DIR / "audio"
+        self._music_ok = MULTIMEDIA_AVAILABLE
+        self._sfx: Dict[str, Any] = {}
+        self._music_output: Any = None
+        self.music_player: Any = None
+
+        if not MULTIMEDIA_AVAILABLE:
+            log.warning("Аудио отключено: PyQt6-Multimedia недоступен.")
+            return
 
         # -- музыка --
-        self._music_output = QAudioOutput(self)
-        self.music_player = QMediaPlayer(self)
-        self.music_player.setAudioOutput(self._music_output)
         try:
-            self.music_player.errorOccurred.connect(self._on_music_error)
-        except Exception:  # pragma: no cover
-            pass
-        self._music_ok = True
+            self._music_output = QAudioOutput(self)
+            self.music_player = QMediaPlayer(self)
+            self.music_player.setAudioOutput(self._music_output)
+            try:
+                self.music_player.errorOccurred.connect(self._on_music_error)
+            except Exception:  # pragma: no cover
+                pass
+        except Exception as exc:
+            self._music_ok = False
+            log.warning("Не удалось создать аудио-плеер: %s — продолжаю без музыки.", exc)
 
         # -- SFX --
-        self._sfx: Dict[str, QSoundEffect] = {}
-        sounds_cfg: Dict[str, str] = self.storage.settings.get("sounds", {})
+        sounds_cfg: Dict[str, str] = self.storage.settings.get("sounds", {}) or {}
         for name in ("hover", "select", "back"):
             fname = sounds_cfg.get(name, f"{name}.wav")
             path = self._audio_dir / fname
-            eff = QSoundEffect(self)
             try:
+                eff = QSoundEffect(self)
                 if path.exists():
                     eff.setSource(QUrl.fromLocalFile(str(path)))
                     eff.statusChanged.connect(
@@ -550,9 +570,9 @@ class AudioEngine(QObject):
                 else:
                     log.warning("SFX-файл отсутствует: %s — звук '%s' не будет играть.",
                                 path, name)
+                self._sfx[name] = eff
             except Exception as exc:
                 log.warning("Ошибка загрузки SFX '%s': %s", name, exc)
-            self._sfx[name] = eff
 
         self.apply_volumes()
 
@@ -569,10 +589,13 @@ class AudioEngine(QObject):
 
     # -- API ------------------------------------------------------------
     def apply_volumes(self) -> None:
+        if not MULTIMEDIA_AVAILABLE:
+            return
         mv = float(self.storage.settings.get("music_volume", 70))
         sv = float(self.storage.settings.get("sfx_volume", 80))
         try:
-            self._music_output.setVolume(max(0.0, min(1.0, mv / 100.0)))
+            if self._music_output is not None:
+                self._music_output.setVolume(max(0.0, min(1.0, mv / 100.0)))
         except Exception as exc:
             log.warning("Не удалось задать громкость музыки: %s", exc)
         for eff in self._sfx.values():
@@ -582,6 +605,8 @@ class AudioEngine(QObject):
                 pass
 
     def start_music(self) -> None:
+        if not MULTIMEDIA_AVAILABLE or self.music_player is None:
+            return
         fname = str(self.storage.settings.get("music_file", "menu_theme.mp3"))
         path = self._audio_dir / fname
         if not path.exists():
@@ -598,6 +623,8 @@ class AudioEngine(QObject):
             log.warning("Не удалось запустить музыку: %s", exc)
 
     def reload_music(self) -> None:
+        if not MULTIMEDIA_AVAILABLE or self.music_player is None:
+            return
         try:
             self.music_player.stop()
         except Exception:
@@ -605,6 +632,8 @@ class AudioEngine(QObject):
         self.start_music()
 
     def play_sfx(self, name: str) -> None:
+        if not MULTIMEDIA_AVAILABLE:
+            return
         eff = self._sfx.get(name)
         if eff is None:
             return
@@ -946,13 +975,18 @@ class _Slot(QWidget):
         v.addWidget(self.desc_label)
 
         self._icon_size = QSize(0, 0)
+        self._icon_item: Optional[CarouselItem] = None
 
     # -- перекомпоновка под новый размер ------------------------------
     def relayout(self, slot_size: QSize, icon_size: QSize, name_h: int, desc_h: int) -> None:
         self.resize(slot_size)
         self.inner.resize(slot_size)
-        if self._icon_size != icon_size:
+        # Перерисовываем иконку при смене размера ИЛИ при смене контента слота
+        # (во время анимации карусели один и тот же слот переиспользуется под
+        #  разные игры — без этого соседний слот показывал бы старую иконку).
+        if self._icon_size != icon_size or self._icon_item is not self.item:
             self._icon_size = icon_size
+            self._icon_item = self.item
             self.icon_label.setFixedSize(icon_size)
             if self.item.kind == "game" and self.item.game is not None:
                 g = self.item.game
@@ -1100,8 +1134,14 @@ class CarouselWidget(QWidget):
         icon_size = QSize(m["icon"], m["icon"])
         slot_size = QSize(m["slot_w"], m["slot_h"])
         n_slots = len(self._slots)
+        n_items = max(1, len(self.items))
         duration = 250
         new_animating: Dict[int, int] = {}
+
+        # Если элементов меньше, чем слотов, соседние позиции «зацикливаются» на
+        # существующие items (например, библиотека из 1 игры + 2 кнопки).
+        def logical_for_offset(off: int) -> int:
+            return (self.index + off) % n_items
 
         # Сбрасываем карту «анимируемых» индексов — построим заново
         self._animating.clear()
@@ -1113,14 +1153,13 @@ class CarouselWidget(QWidget):
             if final_off < 0 or final_off >= n_slots:
                 # Вылетел за край — мгновенный телепорт на противоположную сторону
                 wrapped_off = ((final_off % n_slots) + n_slots) % n_slots
-                new_logical = (self.index + wrapped_off) % len(self.items)
+                new_logical = logical_for_offset(wrapped_off)
                 slot.item = self._item_for_logical(new_logical)
                 slot.set_active(wrapped_off == 0)
                 slot.relayout(slot_size, icon_size, m["name_h"], m["desc_h"])
                 slot.move(self._target_pos(wrapped_off))
-                new_animating[new_logical] = wrapped_off
                 continue
-            new_logical = (self.index + final_off) % len(self.items)
+            new_logical = logical_for_offset(final_off)
             new_animating[new_logical] = final_off
             # Позиция — анимируется на внешнем _slot (у него opacity-эффект, это ок)
             self._kill_anim(id(slot), "pos")
@@ -1134,6 +1173,8 @@ class CarouselWidget(QWidget):
             self._pos_anims[id(slot)] = anim
             anim.start()
 
+        # Уникальные целевые логические индексы этого шага — только они участвуют
+        # в дедупликации при завершении анимации.
         self._animating = new_animating
 
         # прозрачность: центральный слот (оффсет 0) → 1.0, остальные → 0.4
@@ -1734,6 +1775,10 @@ class MainWindow(QWidget):
 
         # --- фон (за каруселью) ---
         self.background = BackgroundCrossfade(self.assets, self)
+        # Фон стартует с реального размера окна: иначе первый кроссфейд
+        # предрассчитает pixmap для 1x1 и фон будет растянутым/чёрным.
+        geo0 = screen.availableGeometry() if screen else QRect(0, 0, 1920, 1080)
+        self.background.setGeometry(0, 0, geo0.width(), geo0.height())
 
         # --- центральная область ---
         central = QWidget(self)
