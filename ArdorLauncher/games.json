@@ -26,24 +26,6 @@
       "icon": "assets/icons/void_station.png",
       "cover": "assets/covers/void_station.png",
       "background": "assets/backgrounds/void_station.jpg"
-    },
-    {
-      "id": "99fb2f19-1bc8-4038-b55b-2139a8bfed2a",
-      "title": "Test Game",
-      "description": "",
-      "exe_path": "/bin/true",
-      "icon": "",
-      "cover": "",
-      "background": ""
-    },
-    {
-      "id": "c547ec4a-43ce-46c5-88d9-1888133936a1",
-      "title": "Test Game 4",
-      "description": "",
-      "exe_path": "/bin/true",
-      "icon": "",
-      "cover": "",
-      "background": ""
     }
   ]
 }
