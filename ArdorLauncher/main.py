@@ -10,6 +10,7 @@ Ardor Gaming — полноэкранный игровой лаунчер (ко�
 from __future__ import annotations
 
 import json
+from collections import OrderedDict
 import logging
 import os
 import subprocess
@@ -57,6 +58,7 @@ from PyQt6.QtCore import (
     QPoint,
     QPointF,
     QRect,
+    QRectF,
     QSize,
     Qt,
     QUrl,
@@ -64,6 +66,7 @@ from PyQt6.QtCore import (
     pyqtSignal,
 )
 from PyQt6.QtGui import (
+    QImage,
     QColor,
     QFont,
     QFontMetrics,
@@ -404,7 +407,8 @@ class StorageManager:
 
 
 def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-    out = dict(base)
+    import copy as _copy
+    out = _copy.deepcopy(base)
     for k, v in override.items():
         if isinstance(v, dict) and isinstance(out.get(k), dict):
             out[k] = _deep_merge(out[k], v)
@@ -418,7 +422,8 @@ def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any
 # ──────────────────────────────────────────────────────────────────────────────
 class AssetLoader:
     def __init__(self) -> None:
-        self._blur_cache: Dict[str, QPixmap] = {}
+        self._blur_cache: "OrderedDict[str, QPixmap]" = OrderedDict()
+        self._BLUR_CACHE_MAX = 12  # ~12 фонов × по одному экрану — потолок памяти
 
     # -- базовая загрузка ---------------------------------------------------
     def resolve(self, rel_or_abs: str) -> Path:
@@ -469,6 +474,8 @@ class AssetLoader:
         """Возвращает уже размытый и растянутый под экран QPixmap (кэш по пути)."""
         cache_key = f"{path_str}|{screen_size.width()}x{screen_size.height()}"
         cached = self._blur_cache.get(cache_key)
+        if cached is not None:
+            self._blur_cache.move_to_end(cache_key)
         if cached is not None and not cached.isNull():
             return cached
 
@@ -484,6 +491,8 @@ class AssetLoader:
             black = QPixmap(screen_size)
             black.fill(QColor("#000000"))
             self._blur_cache[cache_key] = black
+            while len(self._blur_cache) > self._BLUR_CACHE_MAX:
+                self._blur_cache.popitem(last=False)
             return black
 
         try:
@@ -502,11 +511,15 @@ class AssetLoader:
             blur.setBlurHints(QGraphicsBlurEffect.BlurHint.PerformanceHint)
             item.setGraphicsEffect(blur)
             scene.setSceneRect(0, 0, small.width(), small.height())
+            # ВАЖНО: в PyQt6 корректная перегрузка —
+            #   render(painter: QPainter, target: QRectF, source: QRectF[, mode])
+            # (QImage-перегрузки нет; раньше передавали QRect → TypeError и
+            # блюр молча откатывался к резкому фону).
             result = QPixmap(small.size())
             result.fill(Qt.GlobalColor.transparent)
             painter = QPainter(result)
             scene.render(painter,
-                         QRect(QPoint(0, 0), small.size()),
+                         QRectF(0, 0, small.width(), small.height()),
                          QRectF(0, 0, small.width(), small.height()))
             painter.end()
             # 3. увеличить обратно до размера экрана
@@ -523,6 +536,8 @@ class AssetLoader:
                 Qt.TransformationMode.SmoothTransformation,
             )
         self._blur_cache[cache_key] = final
+        while len(self._blur_cache) > self._BLUR_CACHE_MAX:
+            self._blur_cache.popitem(last=False)
         return final
 
 
@@ -584,7 +599,7 @@ class AudioEngine(QObject):
                         error, error_string)
 
     def _on_sfx_status(self, name: str, status: Any, eff: QSoundEffect) -> None:
-        if status != QSoundEffect.Status.Loaded and status != QSoundEffect.Status.Ready:
+        if status != QSoundEffect.Status.Ready:
             log.warning("SFX '%s' не загружен (status=%s) — не играю.", name, status)
 
     # -- API ------------------------------------------------------------
@@ -607,6 +622,9 @@ class AudioEngine(QObject):
     def start_music(self) -> None:
         if not MULTIMEDIA_AVAILABLE or self.music_player is None:
             return
+        if not self._music_ok:
+            log.info("Музыка пропущена: ранее уже была ошибка плагина.")
+            return
         fname = str(self.storage.settings.get("music_file", "menu_theme.mp3"))
         path = self._audio_dir / fname
         if not path.exists():
@@ -625,11 +643,22 @@ class AudioEngine(QObject):
     def reload_music(self) -> None:
         if not MULTIMEDIA_AVAILABLE or self.music_player is None:
             return
+        self._music_ok = True  # пользователь мог исправить файл/громкость — даём шанс
         try:
             self.music_player.stop()
         except Exception:
             pass
         self.start_music()
+
+    def shutdown(self) -> None:
+        """Остановить проигрывание перед выходом (музыка не должна «дожидать» процесс)."""
+        if not MULTIMEDIA_AVAILABLE:
+            return
+        try:
+            if self.music_player is not None:
+                self.music_player.stop()
+        except Exception as exc:
+            log.debug("stop music failed: %s", exc)
 
     def play_sfx(self, name: str) -> None:
         if not MULTIMEDIA_AVAILABLE:
@@ -638,7 +667,7 @@ class AudioEngine(QObject):
         if eff is None:
             return
         try:
-            if eff.status() in (QSoundEffect.Status.Loaded, QSoundEffect.Status.Ready):
+            if eff.status() == QSoundEffect.Status.Ready:
                 eff.play()
         except Exception as exc:
             log.debug("SFX '%s' не сыграл: %s", name, exc)
@@ -797,8 +826,8 @@ class GamepadController(QObject):
             left = self._joy.get_axis(0) < -self.deadzone
             right = self._joy.get_axis(0) > self.deadzone
             # В pygame ось Y: -1 = вверх, +1 = вниз. D-pad hat: y=1 вверх.
-            up = self._joy.get_axis(1) > self.deadzone     # stick: down-axis => up
-            down = self._joy.get_axis(1) < -self.deadzone
+            up = self._joy.get_axis(1) < -self.deadzone    # pygame: -1 = вверх
+            down = self._joy.get_axis(1) > self.deadzone   # pygame: +1 = вниз
             try:
                 hx, hy = self._joy.get_hat(0)
                 left = left or hx == -1
@@ -811,9 +840,15 @@ class GamepadController(QObject):
         except Exception as exc:
             # Текущий контроллер отключён mid-poll — переподключение
             log.warning("Чтение геймпада сорвалось (%s) — переподключение.", exc)
+            was = self._joy is not None
             self._detach_joystick()
-            self._hotplug_check()
-            self.gamepad_disconnected.emit()
+            # _hotplug_check сам эмитит disconnected, если контроллеров нет;
+            # эмитим сами только если он нашёл/подключил новый.
+            self._hotplug_check(silent=True)
+            if was and self._joy is not None:
+                pass  # переподключились к другому — connected уже эмитнут внутри
+            elif was:
+                self.gamepad_disconnected.emit()
             return
 
         self._process_directions(states, now)
@@ -843,6 +878,10 @@ class GamepadController(QObject):
         return int(time.monotonic() * 1000)
 
     def _process_directions(self, states: Dict[str, bool], now: int) -> None:
+        # Самовосстановление состояния после hot-plug/ошибки чтения:
+        # словарьDirections должен содержать все 4 направления.
+        for d in self.DIRECTIONS:
+            self._prev.setdefault(d, False)
         signals = {
             "left": self.navigate_left,
             "right": self.navigate_right,
@@ -1014,7 +1053,7 @@ class CarouselWidget(QWidget):
     index_changed = pyqtSignal(int)          # индекс в items (для фона/топа)
     activated = pyqtSignal(int)              # нажатие A/Enter на элементе
 
-    VISIBLE = 3
+    VISIBLE = 5   # нечётное — центральный offset 0 существует всегда, даже при 2 элементах
 
     def __init__(self, assets: AssetLoader, scale: float,
                  parent: Optional[QWidget] = None) -> None:
@@ -1024,9 +1063,13 @@ class CarouselWidget(QWidget):
         self.items: List[CarouselItem] = []
         self.index: int = 0
         self._slots: List[_Slot] = []
-        self._pos_anims: Dict[int, QPropertyAnimation] = {}
-        self._op_anims: Dict[int, QPropertyAnimation] = {}
-        self._animating: Dict[int, int] = {}   # logical index -> visible offset
+        # Ключевое исправление: у каждого физического слота хранится ЕГО
+        # визуальный offset (-1 = левый сосед, 0 = центр, +1 = правый сосед).
+        # Раньше код путал индекс в списке _slots с визуальным offset — после
+        # первого wrap подсветка и позиции разъезжались.
+        self._slot_offset: List[int] = []
+        self._pos_anims: List[Optional[QPropertyAnimation]] = []
+        self._op_anims: List[Optional[QPropertyAnimation]] = []
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
     # -- размеры ---------------------------------------------------------
@@ -1048,47 +1091,36 @@ class CarouselWidget(QWidget):
         for s in self._slots:
             s.deleteLater()
         self._slots.clear()
+        self._slot_offset.clear()
         self._pos_anims.clear()
         self._op_anims.clear()
-        self._animating.clear()
         self.items = items
         self.index = start_index % max(1, len(items))
-        n = min(self.VISIBLE, max(1, len(items)))
-        for _ in range(n):
-            self._slots.append(_Slot(CarouselItem("game", ""), self.assets, self.scale, self))
+        # Число слотов: не больше VISIBLE, но и не больше элементов (минимум 3 —
+        # иначе при 1–2 элементах центральный offset 0 мог «уехать» из диапазона).
+        n = min(self.VISIBLE, max(3, len(items)))
+        if n % 2 == 0:
+            n -= 1  # всегда нечётное => offset 0 существует
+        half = n // 2
+        offsets = list(range(-half, n - half))
+        for i in range(n):
+            slot = _Slot(CarouselItem("game", ""), self.assets, self.scale, self)
+            self._slots.append(slot)
+            self._slot_offset.append(offsets[i])
+            self._pos_anims.append(None)
+            self._op_anims.append(None)
         self._rebind_all()
         self.relayout_all()
-
-    def _logical_slot(self, logical: int) -> Optional[_Slot]:
-        if not self.items:
-            return None
-        off = self._offset_of(logical)
-        if off is None:
-            return None
-        return self._slots[off]
-
-    def _offset_of(self, logical: int) -> Optional[int]:
-        """Видимый слот (0..VISIBLE-1), отвечающий за логический индекс сейчас."""
-        if logical in self._animating:
-            return self._animating[logical]
-        if not self.items:
-            return None
-        rel = (logical - self.index) % len(self.items)
-        half = self.VISIBLE // 2
-        if rel <= half and rel < len(self._slots):
-            return rel
-        rel_neg = rel - len(self.items)
-        if -half <= rel_neg and (-rel_neg) < len(self._slots):
-            return -rel_neg
-        return None
 
     def _item_for_logical(self, logical: int) -> CarouselItem:
         return self.items[logical % len(self.items)]
 
     def _rebind_all(self) -> None:
+        """Привязать контент каждого слота по его визуальному offset."""
         m = self.metrics()
         icon_size = QSize(m["icon"], m["icon"])
-        for off, slot in enumerate(self._slots):
+        for i, slot in enumerate(self._slots):
+            off = self._slot_offset[i]
             logical = (self.index + off) % max(1, len(self.items))
             slot.item = self._item_for_logical(logical)
             slot.set_active(off == 0)
@@ -1107,7 +1139,8 @@ class CarouselWidget(QWidget):
     def relayout_all(self) -> None:
         m = self.metrics()
         icon_size = QSize(m["icon"], m["icon"])
-        for off, slot in enumerate(self._slots):
+        for i, slot in enumerate(self._slots):
+            off = self._slot_offset[i]
             slot.relayout(QSize(m["slot_w"], m["slot_h"]), icon_size,
                           m["name_h"], m["desc_h"])
             slot.move(self._target_pos(off))
@@ -1125,92 +1158,91 @@ class CarouselWidget(QWidget):
         self.index = (self.index + delta) % len(self.items)
         if self.index == old:
             return False
-        self._animate_shift(delta)
+        # Эффективный визуальный шаг: при малом числе элементов (n_items < span)
+        # сдвиг на весь span — no-op логически, поэтому берём остаток по модулю.
+        eff = ((delta + len(self.items) // 2) % len(self.items)) - len(self.items) // 2
+        if eff == 0:
+            eff = delta  # например, чётное число элементов и delta=±1 -> eff=∓... не ноль
+        self._animate_shift(eff if eff != 0 else delta)
         self.index_changed.emit(self.index)
         return True
 
     def _animate_shift(self, delta: int) -> None:
+        """Сдвиг карусели. Каждый слот ЕДЕТ на visual_offset - delta; слот,
+        вылетевший за край, телепортируется на противоположную сторону с новым
+        контентом (до старта анимации, чтобы не был виден «прыжок»)."""
         m = self.metrics()
         icon_size = QSize(m["icon"], m["icon"])
         slot_size = QSize(m["slot_w"], m["slot_h"])
         n_slots = len(self._slots)
         n_items = max(1, len(self.items))
         duration = 250
-        new_animating: Dict[int, int] = {}
+        # Диапазон допустимых визуальных offset'ов: [-half, +half]
+        half = n_slots // 2
+        valid = set(range(-half, n_slots - half))
+        span = 2 * half + 1  # количество визуальных позиций
 
-        # Если элементов меньше, чем слотов, соседние позиции «зацикливаются» на
-        # существующие items (например, библиотека из 1 игры + 2 кнопки).
         def logical_for_offset(off: int) -> int:
             return (self.index + off) % n_items
 
-        # Сбрасываем карту «анимируемых» индексов — построим заново
-        self._animating.clear()
-
-        for old_off in range(n_slots):
-            slot = self._slots[old_off]
-            # Слот едет в сторону, противоположную сдвигу индекса
+        for i, slot in enumerate(self._slots):
+            old_off = self._slot_offset[i]
             final_off = old_off - delta
-            if final_off < 0 or final_off >= n_slots:
-                # Вылетел за край — мгновенный телепорт на противоположную сторону
-                wrapped_off = ((final_off % n_slots) + n_slots) % n_slots
-                new_logical = logical_for_offset(wrapped_off)
-                slot.item = self._item_for_logical(new_logical)
+            if final_off not in valid:
+                # Вылетел за край — телепорт ровно на один span в сторону въезда.
+                wrapped_off = final_off + span * (1 if delta > 0 else -1)
+                assert wrapped_off in valid, f"wrap math broken: {wrapped_off}"
+                # Если элементов меньше слотов, несколько соседей показывают один
+                # и тот же item — это допустимо; дубликат offset'а невозможен,
+                # т.к. каждый слот сдвигается синхронно на один и тот же delta.
+                self._slot_offset[i] = wrapped_off
+                slot.item = self._item_for_logical(logical_for_offset(wrapped_off))
                 slot.set_active(wrapped_off == 0)
                 slot.relayout(slot_size, icon_size, m["name_h"], m["desc_h"])
-                slot.move(self._target_pos(wrapped_off))
-                continue
-            new_logical = logical_for_offset(final_off)
-            new_animating[new_logical] = final_off
-            # Позиция — анимируется на внешнем _slot (у него opacity-эффект, это ок)
-            self._kill_anim(id(slot), "pos")
+                # Встать в стартовую точку за краем экрана, затем анимировать внутрь
+                slot.move(self._target_pos(wrapped_off + delta))
+                final_off = wrapped_off
+            else:
+                self._slot_offset[i] = final_off
+
+            # Позиция анимируется на внешнем _slot (на нём opacity-эффект).
+            self._kill_anim(i, "pos")
             anim = QPropertyAnimation(slot, b"pos", self)
             anim.setDuration(duration)
             anim.setStartValue(slot.pos())
             anim.setEndValue(self._target_pos(final_off))
             anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-            anim.finished.connect(
-                lambda s=slot, lg=new_logical: self._finish_move(s, lg))
-            self._pos_anims[id(slot)] = anim
+            self._pos_anims[i] = anim
             anim.start()
 
-        # Уникальные целевые логические индексы этого шага — только они участвуют
-        # в дедупликации при завершении анимации.
-        self._animating = new_animating
-
-        # прозрачность: центральный слот (оффсет 0) → 1.0, остальные → 0.4
-        for off, slot in enumerate(self._slots):
+        # Прозрачность и свечение — по ЦЕЛЕВОМУ визульному offset слота,
+        # а не по его индексу в списке (прежний баг: подсветка оставалась на
+        # физически «центральном в списке» слоте после wrap).
+        for i, slot in enumerate(self._slots):
+            off = self._slot_offset[i]
             target_op = 1.0 if off == 0 else 0.4
             eff = slot.opacity_effect
-            self._kill_anim(id(slot), "op")
+            self._kill_anim(i, "op")
             a = QPropertyAnimation(eff, b"opacity", self)
             a.setDuration(duration)
             a.setStartValue(eff.opacity())
             a.setEndValue(target_op)
             a.setEasingCurve(QEasingCurve.Type.OutCubic)
-            self._op_anims[id(slot)] = a
+            self._op_anims[i] = a
             a.start()
-        # свечение — сразу на слоте с оффсетом 0
-        for off, slot in enumerate(self._slots):
             slot.set_active(off == 0)
 
-    def _finish_move(self, slot: _Slot, logical: int) -> None:
-        # Обновить контент, когда слот доехал до целевой позиции
-        item = self._item_for_logical(logical)
-        if (slot.item.kind != item.kind or slot.item.title != item.title
-                or slot.item.game is not item.game):
-            m = self.metrics()
-            slot.item = item
-            slot.relayout(QSize(m["slot_w"], m["slot_h"]),
-                          QSize(m["icon"], m["icon"]), m["name_h"], m["desc_h"])
-
-    def _kill_anim(self, key: int, _kind: str) -> None:
-        store = self._pos_anims if _kind == "pos" else self._op_anims
-        old = store.pop(key, None)
+    def _kill_anim(self, idx: int, kind: str) -> None:
+        store = self._pos_anims if kind == "pos" else self._op_anims
+        if idx >= len(store):
+            return
+        old = store[idx]
         if old is not None:
             try:
                 old.stop()
             except Exception:
                 pass
+            store[idx] = None
 
     # -- активация -----------------------------------------------------------
     def current_item(self) -> Optional[CarouselItem]:
@@ -2002,6 +2034,22 @@ class MainWindow(QWidget):
         # B/Escape на Home → диалог «Выход / Свернуть / Отмена»
         self._home_back_dialog()
 
+    def _quit_app(self) -> None:
+        """Корректное завершение: стоп музыка + pygame quit (closeEvent не всегда
+        вызывается при QApplication.quit из модального диалога)."""
+        try:
+            self.audio.shutdown()
+        except Exception:
+            pass
+        try:
+            self.gamepad.shutdown()
+            if PYGAME_AVAILABLE:
+                pygame.joystick.quit()
+                pygame.quit()
+        except Exception:
+            pass
+        QApplication.quit()
+
     def _home_back_dialog(self) -> None:
         box = QMessageBox(self)
         box.setWindowTitle("Ardor Gaming")
@@ -2012,7 +2060,7 @@ class MainWindow(QWidget):
         box.exec()
         clicked = box.clickedButton()
         if clicked is b_exit:
-            QApplication.quit()
+            self._quit_app()
         elif clicked is b_min:
             self.showMinimized()
 
@@ -2131,7 +2179,7 @@ class MainWindow(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No)
         if answer == QMessageBox.StandardButton.Yes:
-            QApplication.quit()
+            self._quit_app()
 
     # ======================================================================
     # Геймпад-индикация и toast
@@ -2269,7 +2317,7 @@ class MainWindow(QWidget):
             QApplication.restoreOverrideCursor()
             self._cursor_hidden = False
         try:
-            self.audio.music_player.stop()
+            self.audio.shutdown()
         except Exception:
             pass
         log.info("Лаунчер закрыт.")
