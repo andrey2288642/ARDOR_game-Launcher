@@ -70,11 +70,21 @@ from PyQt6.QtGui import (
     QColor,
     QFont,
     QFontMetrics,
+    QIcon,
     QPainter,
+    QPen,
     QKeyEvent,
     QMouseEvent,
     QPixmap,
 )
+try:
+    from PyQt6.QtSvg import QSvgRenderer  # опционально: SVG-иконки (выключение и т.п.)
+
+    SVG_AVAILABLE: bool = True
+except ImportError as _svg_err:
+    QSvgRenderer = None  # type: ignore[assignment,misc]
+    SVG_AVAILABLE = False
+    log.warning("QtSvg недоступен (%s) — SVG-иконки будут пропущены.", _svg_err)
 try:
     from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer, QSoundEffect
 
@@ -197,6 +207,19 @@ def build_qss(scale: float = 1.0) -> str:
         color: #000000;
     }}
     QPushButton:default {{
+        border-color: #FF3333;
+    }}
+    QPushButton#powerButton {{
+        background-color: transparent;
+        border: 1px solid {PANEL2};
+        border-radius: {px(10)}px;
+        color: {TEXT2};
+        font-size: {px(20)}px;
+        padding: {px(4)}px {px(10)}px;
+    }}
+    QPushButton#powerButton:hover, QPushButton#powerButton:focus {{
+        background-color: {ACCENT};
+        color: #000000;
         border-color: #FF3333;
     }}
     QLineEdit {{
@@ -405,6 +428,33 @@ class StorageManager:
         self.games.append(game)  # дописываем, не перезаписываем существующие
         self.save_games()
 
+    def remove_game(self, game_id: str) -> bool:
+        before = len(self.games)
+        self.games = [g for g in self.games if g.id != game_id]
+        if len(self.games) != before:
+            self.save_games()
+            return True
+        return False
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Power actions — Windows (subprocess.Popen, без os.system; задержка 5 с,
+# отмена — shutdown /a). Возвращает текст ошибки или None при успехе.
+# ──────────────────────────────────────────────────────────────────────────────
+def run_power_command(args: List[str]) -> Optional[str]:
+    try:
+        proc = subprocess.Popen(args)
+    except Exception as exc:
+        log.error("Не удалось запустить %s: %s", args, exc)
+        return str(exc)
+    try:
+        rc = proc.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        return "Команда выполняется слишком долго."
+    if rc not in (0, None):
+        return f"Windows отказала в команде (код {rc}). Возможно, политика группы."
+    return None
+
 
 def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
     import copy as _copy
@@ -433,23 +483,43 @@ class AssetLoader:
         return BASE_DIR / p
 
     def pixmap(self, path_str: str, size: QSize, placeholder_text: str = "") -> QPixmap:
-        """Загружает изображение (center-crop под размер); при отсутствии — placeholder."""
+        """Загружает изображение (center-crop под размер); при отсутствии — placeholder.
+        Поддерживает PNG/JPG и SVG (рендер через QSvgRenderer, если QtSvg доступен)."""
         if path_str:
             try:
-                pm = QPixmap(str(self.resolve(path_str)))
-                if not pm.isNull():
-                    scaled = pm.scaled(
-                        size,
-                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                        Qt.TransformationMode.SmoothTransformation,
-                    )
-                    x = max(0, (scaled.width() - size.width()) // 2)
-                    y = max(0, (scaled.height() - size.height()) // 2)
-                    return scaled.copy(x, y, size.width(), size.height())
+                p = self.resolve(path_str)
+                if p.suffix.lower() == ".svg":
+                    pm = self._svg_pixmap(p, size)
+                    if pm is not None:
+                        return pm
+                else:
+                    pm = QPixmap(str(p))
+                    if not pm.isNull():
+                        scaled = pm.scaled(
+                            size,
+                            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                            Qt.TransformationMode.SmoothTransformation,
+                        )
+                        x = max(0, (scaled.width() - size.width()) // 2)
+                        y = max(0, (scaled.height() - size.height()) // 2)
+                        return scaled.copy(x, y, size.width(), size.height())
                 log.warning("Не удалось загрузить картинку: %s", path_str)
             except Exception as exc:
                 log.warning("Ошибка загрузки %s: %s", path_str, exc)
         return self.placeholder(size, placeholder_text or path_str or "no image")
+
+    def _svg_pixmap(self, path: Path, size: QSize) -> Optional[QPixmap]:
+        if not SVG_AVAILABLE or not path.exists():
+            return None
+        renderer = QSvgRenderer(str(path))
+        if not renderer.isValid():
+            return None
+        pm = QPixmap(size)
+        pm.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pm)
+        renderer.render(painter)
+        painter.end()
+        return pm
 
     def placeholder(self, size: QSize, text: str) -> QPixmap:
         pm = QPixmap(size)
@@ -964,6 +1034,33 @@ class CarouselItem:
     game: Optional[Game] = None
 
 
+def make_add_tile(size: QSize) -> QPixmap:
+    """Nintendo-Switch-подобная «пустая ячейка»: тёмный квадрат с тонкой
+    рамкой и большой плюс-иконкой по центру. Рисуется кодом — ассеты не нужны."""
+    pm = QPixmap(size)
+    pm.fill(Qt.GlobalColor.transparent)
+    try:
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        rect = QRectF(2, 2, size.width() - 4, size.height() - 4)
+        p.setPen(QPen(QColor("#4A2020"), max(2.0, size.width() / 90.0)))
+        p.setBrush(QColor(PANEL))
+        radius = max(6.0, size.width() * 0.08)
+        p.drawRoundedRect(rect, radius, radius)
+        # плюс
+        c = QColor(TEXT2)
+        p.setPen(QPen(c, max(3.0, size.width() / 45.0),
+                      Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        third = size.width() / 3.0
+        cx, cy = size.width() / 2.0, size.height() / 2.0
+        p.drawLine(QPointF(cx - third, cy), QPointF(cx + third, cy))
+        p.drawLine(QPointF(cx, cy - third), QPointF(cx, cy + third))
+        p.end()
+    except Exception as exc:
+        log.warning("Не удалось нарисовать add-тайл: %s", exc)
+    return pm
+
+
 class _Slot(QWidget):
     """Внешний слот карусели: носителе QGraphicsOpacityEffect быть НЕ должно у inner."""
 
@@ -1027,7 +1124,13 @@ class _Slot(QWidget):
             self._icon_size = icon_size
             self._icon_item = self.item
             self.icon_label.setFixedSize(icon_size)
-            if self.item.kind == "game" and self.item.game is not None:
+            if self.item.kind == "add":
+                # Nintendo-Switch-подобная пустая ячейка с плюсом (рисуется кодом)
+                pix = make_add_tile(icon_size)
+            elif self.item.kind == "settings":
+                pix = self.assets.pixmap("assets/icons/settings.png", icon_size,
+                                         self.item.title)
+            elif self.item.kind == "game" and self.item.game is not None:
                 g = self.item.game
                 pix = self.assets.pixmap(g.icon or g.cover, icon_size, g.title)
             else:
@@ -1606,24 +1709,66 @@ class SettingsDialog(QDialog):
         t.setObjectName("dialogTitle")
         v.addWidget(t)
 
-        self.btn_min = QPushButton("Свернуть в Windows", page)
-        self.btn_restart = QPushButton("Перезагрузить ПК", page)
-        self.btn_shutdown = QPushButton("Выключить ПК", page)
-        self.btn_min.clicked.connect(self._minimize_to_windows)
-        self.btn_restart.clicked.connect(lambda: self._power("restart"))
+        # Порядок кнопок — как в меню питания PS4/Switch:
+        # Выключить / Перезагрузить / Сон / Выйти в Windows / Настройки Windows
+        self.btn_shutdown = QPushButton("⏻  Выключить ПК", page)
+        self.btn_restart = QPushButton("⟳  Перезагрузить ПК", page)
+        self.btn_sleep = QPushButton("☾  Спящий режим", page)
+        self.btn_min = QPushButton("▶  Выйти в оболочку Windows", page)
+        self.btn_win_settings = QPushButton("Открыть «Параметры Windows»", page)
         self.btn_shutdown.clicked.connect(lambda: self._power("shutdown"))
-        for b in (self.btn_min, self.btn_restart, self.btn_shutdown):
+        self.btn_restart.clicked.connect(lambda: self._power("restart"))
+        self.btn_sleep.clicked.connect(self._sleep)
+        self.btn_min.clicked.connect(self._minimize_to_windows)
+        self.btn_win_settings.clicked.connect(self._open_windows_settings)
+        for b in (self.btn_shutdown, self.btn_restart, self.btn_sleep,
+                  self.btn_min, self.btn_win_settings):
             v.addWidget(b)
 
-        note = QLabel("Перезагрузка/выключение отменимы командой shutdown /a "
+        note = QLabel("Выключение/перезагрузка отменяемы командой shutdown /a "
                       "в течение 5 секунд.", page)
         note.setObjectName("hint")
         note.setWordWrap(True)
         v.addWidget(note)
         v.addStretch(1)
-        self._power_widgets: List[QWidget] = [self.btn_min, self.btn_restart,
-                                               self.btn_shutdown]
+        self._power_widgets: List[QWidget] = [self.btn_shutdown, self.btn_restart,
+                                               self.btn_sleep, self.btn_min,
+                                               self.btn_win_settings]
         return page
+
+    def _open_windows_settings(self) -> None:
+        err = run_power_command(["start", "ms-settings:"])
+        if err:
+            QMessageBox.warning(self, "Ошибка", f"Не удалось открыть Параметры:\n{err}")
+
+    def _sleep(self) -> None:
+        """Спящий режим без пароля: SetSuspendState через ctypes (только Windows).
+        Fallback — блокировка экрана (LockWorkStation), после которой сон
+        наступает по системным настройкам бездействия."""
+        answer = QMessageBox.question(
+            self, "Сон",
+            "Перевести компьютер в спящий режим?\n"
+            "(Пробуждение — любая кнопка геймпада/клавиатуры или питание ПК.)",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        suspended = False
+        try:
+            import ctypes
+            # SetSuspendState(bHibernate=F, bForce=Suspend, bWakeupEventsDisabled=F)
+            ok = ctypes.windll.powrprof.SetSuspendState(0, 1, 0)  # type: ignore[attr-defined]
+            suspended = bool(ok)
+            log.info("SetSuspendState вернул: %s", ok)
+        except Exception as exc:
+            log.warning("ctypes-сон недоступен: %s", exc)
+        if suspended:
+            return
+        err = run_power_command(["rundll32.exe", "user32.dll,LockWorkStation"])
+        if err:
+            QMessageBox.warning(self, "Сон",
+                                f"Не удалось выполнить команду:\n{err}\n"
+                                "Альтернатива: Win+X → U → S или меню Пуск → Завершение работы.")
 
     def _on_music_volume(self, value: int) -> None:
         self.storage.update_setting("music_volume", value)
@@ -1668,27 +1813,9 @@ class SettingsDialog(QDialog):
             return
         args = ["shutdown", "/r", "/t", "5"] if mode == "restart" \
             else ["shutdown", "/s", "/t", "5"]
-        try:
-            proc = subprocess.Popen(args)
-        except Exception as exc:
-            log.error("Не удалось запустить %s: %s", args, exc)
-            QMessageBox.warning(self, "Ошибка",
-                                f"Не удалось выполнить команду:\n{exc}")
-            return
-        check = QTimer(self)
-        check.setSingleShot(True)
-
-        def on_check() -> None:
-            rc = proc.poll()
-            if rc not in (0, None):
-                log.error("shutdown вернул код %s (возможно, блокировка GPO).", rc)
-                QMessageBox.warning(
-                    self, "Ошибка",
-                    f"Windows отказала в команде (код {rc}).\n"
-                    "Возможно, политика группы запрещает выключение из этого аккаунта.")
-
-        check.timeout.connect(on_check)
-        check.start(700)
+        err = run_power_command(args)
+        if err:
+            QMessageBox.warning(self, "Ошибка", err)
 
     def _select_tab(self, i: int) -> None:
         self._tab_i = max(0, min(i, len(self.TABS) - 1))
@@ -1861,6 +1988,30 @@ class MainWindow(QWidget):
         batt.setObjectName("statusText")
         top_l.addWidget(batt)
 
+        # Кнопка ⏻ Питание (иконка power.png / power.svg из assets/icons,
+        # при отсутствии — текстовый символ). Открывает меню: Выключить /
+        # Перезагрузить / Сон / Выйти в Windows.
+        self.btn_power = QPushButton("", self.top_bar)
+        self.btn_power.setObjectName("powerButton")
+        self.btn_power.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_power.clicked.connect(self._power_menu)
+        icon_sz = int(30 * self.scale)
+        pm = None
+        for fname in ("power.svg", "power.png"):
+            fpath = ASSETS_DIR / "icons" / fname
+            if fpath.exists():
+                candidate = self.assets.pixmap(f"assets/icons/{fname}",
+                                               QSize(icon_sz, icon_sz), "")
+                if not candidate.isNull():
+                    pm = candidate
+                    break
+        if pm is not None:
+            self.btn_power.setIcon(QIcon(pm))
+            self.btn_power.setIconSize(QSize(icon_sz, icon_sz))
+        else:
+            self.btn_power.setText("⏻")
+        top_l.addWidget(self.btn_power)
+
         # часы — QTimer 1 сек
         self._clock_timer = QTimer(self)
         self._clock_timer.setInterval(1000)
@@ -1921,10 +2072,12 @@ class MainWindow(QWidget):
     # ======================================================================
     def _make_items(self) -> List[CarouselItem]:
         items = [CarouselItem("game", g.title, g.description, g) for g in self.storage.games]
-        items.append(CarouselItem("settings", "⚙ Настройки", "Звук, экран, питание"))
-        items.append(CarouselItem("add", "➕ Добавить игру",
-                                  "Новая игра в библиотеку" if items[:-2] or self.storage.games
-                                  else "Добавьте первую игру"))
+        if not items:
+            # Пустая библиотека (как на Nintendo Switch): только «ячейка» добавления.
+            items.append(CarouselItem("add", "Добавить игру", "Добавьте первую игру"))
+            return items
+        items.append(CarouselItem("settings", "Настройки", "Звук, экран, питание"))
+        items.append(CarouselItem("add", "Добавить игру", "Новая игра в библиотеку"))
         return items
 
     def _rebuild_carousel(self, keep_index: bool = True) -> None:
@@ -1981,7 +2134,35 @@ class MainWindow(QWidget):
         elif item.kind == "add":
             self._open_add_game()
         else:
-            self.launch_game(item.game)
+            self._game_options(item.game)
+
+    # ======================================================================
+    # Меню игры (как на PS4/Switch): Играть / Удалить / Отмена
+    # ======================================================================
+    def _game_options(self, game: Optional[Game]) -> None:
+        if game is None:
+            return
+        box = QMessageBox(self)
+        box.setWindowTitle(game.title)
+        box.setText(f"{game.title}\n{game.description}".strip())
+        b_play = box.addButton("▶  Играть", QMessageBox.ButtonRole.AcceptRole)
+        b_del = box.addButton("🗑  Удалить игру", QMessageBox.ButtonRole.DestructiveRole)
+        b_cancel = box.addButton("Отмена", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is b_play:
+            self.launch_game(game)
+        elif clicked is b_del:
+            answer = QMessageBox.question(
+                self, "Удаление",
+                f"Удалить «{game.title}» из библиотеки?\n"
+                "(Файлы игры на диске останутся нетронутыми.)",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if answer == QMessageBox.StandardButton.Yes:
+                self.storage.remove_game(game.id)
+                self._rebuild_carousel(keep_index=False)
+                self.show_toast(f"«{game.title}» удалена из библиотеки")
 
     # ======================================================================
     # Роутинг ввода: активный диалог получает всё, иначе — карусель
@@ -2062,6 +2243,59 @@ class MainWindow(QWidget):
         if clicked is b_exit:
             self._quit_app()
         elif clicked is b_min:
+            self.showMinimized()
+
+    # ======================================================================
+    # Меню питания (как на PS4): вызывается кнопкой ⏻ на верхней панели
+    # ======================================================================
+    def _power_menu(self) -> None:
+        box = QMessageBox(self)
+        box.setWindowTitle("Питание")
+        box.setText("Выберите действие:")
+        b_shutdown = box.addButton("⏻  Выключить ПК", QMessageBox.ButtonRole.AcceptRole)
+        b_restart = box.addButton("⟳  Перезагрузить", QMessageBox.ButtonRole.ActionRole)
+        b_sleep = box.addButton("☾  Спящий режим", QMessageBox.ButtonRole.ActionRole)
+        b_windows = box.addButton("▶  Выйти в оболочку Windows",
+                                  QMessageBox.ButtonRole.ActionRole)
+        b_cancel = box.addButton("Отмена", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked in (b_shutdown, b_restart):
+            mode = "shutdown" if clicked is b_shutdown else "restart"
+            label = "выключить" if mode == "shutdown" else "перезагрузить"
+            answer = QMessageBox.question(
+                self, "Подтверждение",
+                f"Вы уверены, что хотите {label} компьютер?\n"
+                "Действие можно отменить командой shutdown /a в течение 5 секунд.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if answer == QMessageBox.StandardButton.Yes:
+                args = ["shutdown", "/s", "/t", "5"] if mode == "shutdown" \
+                    else ["shutdown", "/r", "/t", "5"]
+                err = run_power_command(args)
+                if err:
+                    QMessageBox.warning(self, "Ошибка", err)
+        elif clicked is b_sleep:
+            # переиспользуем логику сна из SettingsDialog (без открытия всего диалога)
+            answer = QMessageBox.question(
+                self, "Сон",
+                "Перевести компьютер в спящий режим?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes)
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            suspended = False
+            try:
+                import ctypes
+                ok = ctypes.windll.powrprof.SetSuspendState(0, 1, 0)  # type: ignore[attr-defined]
+                suspended = bool(ok)
+            except Exception as exc:
+                log.warning("ctypes-сон недоступен: %s", exc)
+            if not suspended:
+                err = run_power_command(["rundll32.exe", "user32.dll,LockWorkStation"])
+                if err:
+                    QMessageBox.warning(self, "Сон", err)
+        elif clicked is b_windows:
             self.showMinimized()
 
     # ======================================================================
