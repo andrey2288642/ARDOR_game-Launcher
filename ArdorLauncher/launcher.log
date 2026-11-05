@@ -1,0 +1,280 @@
+2026-11-04 10:46:57,725 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 10:46:57,725 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 10:46:57,725 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 10:47:11,162 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 10:47:11,163 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 10:47:11,163 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 10:47:11,168 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 10:47:11,169 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 10:47:11,183 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:47:11,184 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:47:11,185 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:47:11,198 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:47:11,199 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:47:11,200 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:47:11,201 - WARNING - Файл музыки отсутствует: /workspace/ArdorLauncher/assets/audio/menu_theme.mp3 — работаю без неё.
+2026-11-04 10:48:18,027 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 10:48:18,027 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 10:48:18,027 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 10:48:18,032 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 10:48:18,033 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 10:48:18,044 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:48:18,045 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:48:18,045 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:48:18,056 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:48:18,057 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:48:18,058 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:48:18,059 - WARNING - Файл музыки отсутствует: /workspace/ArdorLauncher/assets/audio/menu_theme.mp3 — работаю без неё.
+2026-11-04 10:48:53,595 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 10:48:53,595 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 10:48:53,595 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 10:48:53,600 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 10:48:53,600 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 10:48:53,613 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:48:53,613 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:48:53,614 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:48:53,623 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:48:53,624 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:48:53,625 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:49:04,918 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 10:49:04,918 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 10:49:04,918 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 10:49:04,923 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 10:49:04,923 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 10:49:04,936 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:49:04,937 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:49:04,937 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:49:04,947 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:49:04,950 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:49:04,951 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:49:16,727 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 10:49:16,727 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 10:49:16,727 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 10:49:16,732 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 10:49:16,733 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 10:49:16,745 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:49:16,746 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:49:16,747 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:49:16,758 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:49:16,761 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:49:16,766 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:49:17,970 - WARNING - Файл музыки отсутствует: /workspace/ArdorLauncher/assets/audio/menu_theme.mp3 — работаю без неё.
+2026-11-04 10:49:17,970 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 10:49:18,378 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:49:18,379 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:49:18,379 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:49:19,267 - INFO - Запущена игра 'Test Game' (pid=2033)
+2026-11-04 10:49:23,074 - INFO - Лаунчер закрыт.
+2026-11-04 10:49:36,743 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 10:49:36,743 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 10:49:36,744 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 10:49:36,749 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 10:49:36,750 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 10:49:36,762 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:49:36,763 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:49:36,763 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:49:36,773 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:49:36,774 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:49:36,775 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:49:51,038 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 10:49:51,038 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 10:49:51,038 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 10:49:51,043 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 10:49:51,043 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 10:49:51,056 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:49:51,057 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:49:51,058 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:49:51,067 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:49:51,068 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:49:51,069 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:49:59,225 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 10:49:59,225 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 10:49:59,225 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 10:49:59,230 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 10:49:59,230 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 10:49:59,242 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:49:59,243 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:49:59,244 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:49:59,250 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:49:59,251 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:49:59,251 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:49:59,771 - WARNING - Файл музыки отсутствует: /workspace/ArdorLauncher/assets/audio/menu_theme.mp3 — работаю без неё.
+2026-11-04 10:49:59,771 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 10:50:14,269 - INFO - Лаунчер закрыт.
+2026-11-04 10:51:38,522 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 10:51:38,522 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 10:51:38,522 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 10:51:38,527 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 10:51:38,527 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 10:51:38,542 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:51:38,543 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:51:38,543 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:51:38,555 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:51:38,556 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:51:38,557 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:51:39,079 - WARNING - Файл музыки отсутствует: /workspace/ArdorLauncher/assets/audio/menu_theme.mp3 — работаю без неё.
+2026-11-04 10:51:39,080 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 10:51:39,764 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:51:39,765 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:51:39,765 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:51:39,825 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:51:39,825 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:51:39,825 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:51:39,826 - INFO - Запущена игра 'Test Game 4' (pid=2161)
+2026-11-04 10:51:43,313 - INFO - Лаунчер закрыт.
+2026-11-04 10:51:52,165 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 10:51:52,165 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 10:51:52,165 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 10:51:52,171 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 10:51:52,172 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 10:51:52,183 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:51:52,185 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:51:52,185 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:51:52,197 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 10:51:52,198 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 10:51:52,199 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 10:51:52,200 - WARNING - Файл музыки отсутствует: /workspace/ArdorLauncher/assets/audio/menu_theme.mp3 — работаю без неё.
+2026-11-04 12:37:09,613 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 12:37:09,613 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 12:37:09,614 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 12:37:09,618 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:37:09,618 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 12:37:09,803 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:37:09,804 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:37:09,804 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:37:09,816 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:37:09,817 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:37:09,818 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:37:09,819 - WARNING - Файл музыки отсутствует: /workspace/ArdorLauncher/assets/audio/menu_theme.mp3 — работаю без неё.
+2026-11-04 12:41:19,724 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 12:41:19,725 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 12:41:19,725 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 12:41:19,729 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:41:19,730 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 12:41:19,752 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:41:19,752 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:41:19,761 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:41:19,761 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:41:19,815 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:41:19,884 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:41:19,900 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:41:19,930 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:41:19,991 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:41:20,016 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:41:20,065 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:41:20,081 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:41:20,107 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:41:20,172 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:41:20,200 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:41:20,201 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:41:42,871 - WARNING - Предрасчёт размытия не удался (render(self, painter: QPainter|None, /, target: QRectF = QRectF(), source: QRectF = QRectF(), mode: Qt.AspectRatioMode = Qt.KeepAspectRatio): argument 2 has unexpected type 'QRect') — без blur.
+2026-11-04 12:41:57,887 - WARNING - Предрасчёт размытия не удался (render(self, painter: QPainter|None, /, target: QRectF = QRectF(), source: QRectF = QRectF(), mode: Qt.AspectRatioMode = Qt.KeepAspectRatio): argument 2 has unexpected type 'QRect') — без blur.
+2026-11-04 12:42:13,951 - WARNING - Предрасчёт размытия не удался (render(self, painter: QPainter|None, /, target: QRectF = QRectF(), source: QRectF = QRectF(), mode: Qt.AspectRatioMode = Qt.KeepAspectRatio): argument 2 has unexpected type 'QRect') — без blur.
+2026-11-04 12:42:28,697 - WARNING - Предрасчёт размытия не удался (render(self, painter: QPainter|None, /, target: QRectF = QRectF(), source: QRectF = QRectF(), mode: Qt.AspectRatioMode = Qt.KeepAspectRatio): argument 2 has unexpected type 'QRect') — без blur.
+2026-11-04 12:42:29,199 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 12:42:29,200 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 12:42:29,200 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 12:42:29,204 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:42:29,204 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 12:42:29,797 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 12:42:29,797 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 12:42:29,797 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 12:42:29,802 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:42:29,803 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 12:42:29,822 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:42:29,823 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:42:29,832 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:42:29,833 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:42:29,904 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:42:29,925 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:42:29,968 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:42:30,057 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:42:30,083 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:42:30,113 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:42:30,150 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:42:30,167 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:42:30,220 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:42:38,772 - WARNING - Предрасчёт размытия не удался (render(self, painter: QPainter|None, /, target: QRectF = QRectF(), source: QRectF = QRectF(), mode: Qt.AspectRatioMode = Qt.KeepAspectRatio): argument 1 has unexpected type 'QImage') — без blur.
+2026-11-04 12:42:39,287 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 12:42:39,287 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 12:42:39,287 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 12:42:39,291 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:42:39,293 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 12:42:39,897 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 12:42:39,897 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 12:42:39,897 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 12:42:39,901 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:42:39,902 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 12:42:39,918 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:42:39,918 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:42:39,926 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:42:39,927 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:42:40,000 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:42:40,024 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:42:40,071 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:42:40,118 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:42:40,123 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:42:40,150 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:42:40,167 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:42:40,174 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:42:40,218 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:42:48,325 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:42:53,707 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:43:20,621 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:43:21,188 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 12:43:21,188 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 12:43:21,188 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 12:43:21,195 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:43:21,196 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 12:43:21,821 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 12:43:21,821 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 12:43:21,821 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 12:43:21,825 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:43:21,826 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 12:43:21,841 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:43:21,842 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:43:21,850 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:43:21,850 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:43:21,923 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:43:21,951 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:43:21,988 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:43:22,032 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:43:22,049 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:43:22,067 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:43:22,087 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:43:22,094 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:43:22,117 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:44:11,878 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:44:12,400 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 12:44:12,400 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 12:44:12,400 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 12:44:12,405 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:44:12,405 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 12:44:12,999 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 12:44:12,999 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 12:44:12,999 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 12:44:13,003 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:44:13,004 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 12:44:13,019 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:44:13,020 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:44:13,020 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:44:13,028 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:44:13,028 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:44:13,029 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:44:40,918 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 12:44:40,919 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 12:44:40,919 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 12:44:40,923 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:44:40,923 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 12:44:47,446 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/hover.wav — звук 'hover' не будет играть.
+2026-11-04 12:44:47,446 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/select.wav — звук 'select' не будет играть.
+2026-11-04 12:44:47,446 - WARNING - SFX-файл отсутствует: /workspace/ArdorLauncher/assets/audio/back.wav — звук 'back' не будет играть.
+2026-11-04 12:44:47,450 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).
+2026-11-04 12:44:47,451 - WARNING - Не удалось загрузить картинку: assets/icons/gamepad_disconnected.png
+2026-11-04 12:44:47,466 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:44:47,467 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:44:47,467 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:44:47,476 - WARNING - Не удалось загрузить картинку: assets/icons/cyber_drift.png
+2026-11-04 12:44:47,477 - WARNING - Не удалось загрузить картинку: assets/icons/ember_realms.png
+2026-11-04 12:44:47,477 - WARNING - Не удалось загрузить картинку: assets/icons/void_station.png
+2026-11-04 12:44:48,666 - INFO - pygame.joystick инициализирован (SDL2 audio не тронут).

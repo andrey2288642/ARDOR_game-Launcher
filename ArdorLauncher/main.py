@@ -10,6 +10,7 @@ Ardor Gaming — полноэкранный игровой лаунчер (ко�
 from __future__ import annotations
 
 import json
+from collections import OrderedDict
 import logging
 import os
 import subprocess
@@ -57,6 +58,7 @@ from PyQt6.QtCore import (
     QPoint,
     QPointF,
     QRect,
+    QRectF,
     QSize,
     Qt,
     QUrl,
@@ -64,15 +66,36 @@ from PyQt6.QtCore import (
     pyqtSignal,
 )
 from PyQt6.QtGui import (
+    QImage,
     QColor,
     QFont,
     QFontMetrics,
+    QIcon,
     QPainter,
+    QPen,
     QKeyEvent,
     QMouseEvent,
     QPixmap,
 )
-from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer, QSoundEffect
+try:
+    from PyQt6.QtSvg import QSvgRenderer  # опционально: SVG-иконки (выключение и т.п.)
+
+    SVG_AVAILABLE: bool = True
+except ImportError as _svg_err:
+    QSvgRenderer = None  # type: ignore[assignment,misc]
+    SVG_AVAILABLE = False
+    log.warning("QtSvg недоступен (%s) — SVG-иконки будут пропущены.", _svg_err)
+try:
+    from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer, QSoundEffect
+
+    MULTIMEDIA_AVAILABLE: bool = True
+except ImportError as _mm_err:  # PyQt6-Multimedia не установлен — работаем без звука
+    QAudioOutput = None  # type: ignore[assignment,misc]
+    QMediaPlayer = None  # type: ignore[assignment,misc]
+    QSoundEffect = None  # type: ignore[assignment,misc]
+    MULTIMEDIA_AVAILABLE = False
+    log.warning("PyQt6-Multimedia недоступен (%s) — запуск без аудио.", _mm_err)
+
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
@@ -184,6 +207,19 @@ def build_qss(scale: float = 1.0) -> str:
         color: #000000;
     }}
     QPushButton:default {{
+        border-color: #FF3333;
+    }}
+    QPushButton#powerButton {{
+        background-color: transparent;
+        border: 1px solid {PANEL2};
+        border-radius: {px(10)}px;
+        color: {TEXT2};
+        font-size: {px(20)}px;
+        padding: {px(4)}px {px(10)}px;
+    }}
+    QPushButton#powerButton:hover, QPushButton#powerButton:focus {{
+        background-color: {ACCENT};
+        color: #000000;
         border-color: #FF3333;
     }}
     QLineEdit {{
@@ -392,9 +428,37 @@ class StorageManager:
         self.games.append(game)  # дописываем, не перезаписываем существующие
         self.save_games()
 
+    def remove_game(self, game_id: str) -> bool:
+        before = len(self.games)
+        self.games = [g for g in self.games if g.id != game_id]
+        if len(self.games) != before:
+            self.save_games()
+            return True
+        return False
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Power actions — Windows (subprocess.Popen, без os.system; задержка 5 с,
+# отмена — shutdown /a). Возвращает текст ошибки или None при успехе.
+# ──────────────────────────────────────────────────────────────────────────────
+def run_power_command(args: List[str]) -> Optional[str]:
+    try:
+        proc = subprocess.Popen(args)
+    except Exception as exc:
+        log.error("Не удалось запустить %s: %s", args, exc)
+        return str(exc)
+    try:
+        rc = proc.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        return "Команда выполняется слишком долго."
+    if rc not in (0, None):
+        return f"Windows отказала в команде (код {rc}). Возможно, политика группы."
+    return None
+
 
 def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-    out = dict(base)
+    import copy as _copy
+    out = _copy.deepcopy(base)
     for k, v in override.items():
         if isinstance(v, dict) and isinstance(out.get(k), dict):
             out[k] = _deep_merge(out[k], v)
@@ -408,7 +472,8 @@ def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any
 # ──────────────────────────────────────────────────────────────────────────────
 class AssetLoader:
     def __init__(self) -> None:
-        self._blur_cache: Dict[str, QPixmap] = {}
+        self._blur_cache: "OrderedDict[str, QPixmap]" = OrderedDict()
+        self._BLUR_CACHE_MAX = 12  # ~12 фонов × по одному экрану — потолок памяти
 
     # -- базовая загрузка ---------------------------------------------------
     def resolve(self, rel_or_abs: str) -> Path:
@@ -418,23 +483,43 @@ class AssetLoader:
         return BASE_DIR / p
 
     def pixmap(self, path_str: str, size: QSize, placeholder_text: str = "") -> QPixmap:
-        """Загружает изображение (center-crop под размер); при отсутствии — placeholder."""
+        """Загружает изображение (center-crop под размер); при отсутствии — placeholder.
+        Поддерживает PNG/JPG и SVG (рендер через QSvgRenderer, если QtSvg доступен)."""
         if path_str:
             try:
-                pm = QPixmap(str(self.resolve(path_str)))
-                if not pm.isNull():
-                    scaled = pm.scaled(
-                        size,
-                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                        Qt.TransformationMode.SmoothTransformation,
-                    )
-                    x = max(0, (scaled.width() - size.width()) // 2)
-                    y = max(0, (scaled.height() - size.height()) // 2)
-                    return scaled.copy(x, y, size.width(), size.height())
+                p = self.resolve(path_str)
+                if p.suffix.lower() == ".svg":
+                    pm = self._svg_pixmap(p, size)
+                    if pm is not None:
+                        return pm
+                else:
+                    pm = QPixmap(str(p))
+                    if not pm.isNull():
+                        scaled = pm.scaled(
+                            size,
+                            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                            Qt.TransformationMode.SmoothTransformation,
+                        )
+                        x = max(0, (scaled.width() - size.width()) // 2)
+                        y = max(0, (scaled.height() - size.height()) // 2)
+                        return scaled.copy(x, y, size.width(), size.height())
                 log.warning("Не удалось загрузить картинку: %s", path_str)
             except Exception as exc:
                 log.warning("Ошибка загрузки %s: %s", path_str, exc)
         return self.placeholder(size, placeholder_text or path_str or "no image")
+
+    def _svg_pixmap(self, path: Path, size: QSize) -> Optional[QPixmap]:
+        if not SVG_AVAILABLE or not path.exists():
+            return None
+        renderer = QSvgRenderer(str(path))
+        if not renderer.isValid():
+            return None
+        pm = QPixmap(size)
+        pm.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pm)
+        renderer.render(painter)
+        painter.end()
+        return pm
 
     def placeholder(self, size: QSize, text: str) -> QPixmap:
         pm = QPixmap(size)
@@ -459,6 +544,8 @@ class AssetLoader:
         """Возвращает уже размытый и растянутый под экран QPixmap (кэш по пути)."""
         cache_key = f"{path_str}|{screen_size.width()}x{screen_size.height()}"
         cached = self._blur_cache.get(cache_key)
+        if cached is not None:
+            self._blur_cache.move_to_end(cache_key)
         if cached is not None and not cached.isNull():
             return cached
 
@@ -474,6 +561,8 @@ class AssetLoader:
             black = QPixmap(screen_size)
             black.fill(QColor("#000000"))
             self._blur_cache[cache_key] = black
+            while len(self._blur_cache) > self._BLUR_CACHE_MAX:
+                self._blur_cache.popitem(last=False)
             return black
 
         try:
@@ -492,11 +581,15 @@ class AssetLoader:
             blur.setBlurHints(QGraphicsBlurEffect.BlurHint.PerformanceHint)
             item.setGraphicsEffect(blur)
             scene.setSceneRect(0, 0, small.width(), small.height())
+            # ВАЖНО: в PyQt6 корректная перегрузка —
+            #   render(painter: QPainter, target: QRectF, source: QRectF[, mode])
+            # (QImage-перегрузки нет; раньше передавали QRect → TypeError и
+            # блюр молча откатывался к резкому фону).
             result = QPixmap(small.size())
             result.fill(Qt.GlobalColor.transparent)
             painter = QPainter(result)
             scene.render(painter,
-                         QRect(QPoint(0, 0), small.size()),
+                         QRectF(0, 0, small.width(), small.height()),
                          QRectF(0, 0, small.width(), small.height()))
             painter.end()
             # 3. увеличить обратно до размера экрана
@@ -513,6 +606,8 @@ class AssetLoader:
                 Qt.TransformationMode.SmoothTransformation,
             )
         self._blur_cache[cache_key] = final
+        while len(self._blur_cache) > self._BLUR_CACHE_MAX:
+            self._blur_cache.popitem(last=False)
         return final
 
 
@@ -524,25 +619,35 @@ class AudioEngine(QObject):
         super().__init__(parent)
         self.storage = storage
         self._audio_dir = ASSETS_DIR / "audio"
+        self._music_ok = MULTIMEDIA_AVAILABLE
+        self._sfx: Dict[str, Any] = {}
+        self._music_output: Any = None
+        self.music_player: Any = None
+
+        if not MULTIMEDIA_AVAILABLE:
+            log.warning("Аудио отключено: PyQt6-Multimedia недоступен.")
+            return
 
         # -- музыка --
-        self._music_output = QAudioOutput(self)
-        self.music_player = QMediaPlayer(self)
-        self.music_player.setAudioOutput(self._music_output)
         try:
-            self.music_player.errorOccurred.connect(self._on_music_error)
-        except Exception:  # pragma: no cover
-            pass
-        self._music_ok = True
+            self._music_output = QAudioOutput(self)
+            self.music_player = QMediaPlayer(self)
+            self.music_player.setAudioOutput(self._music_output)
+            try:
+                self.music_player.errorOccurred.connect(self._on_music_error)
+            except Exception:  # pragma: no cover
+                pass
+        except Exception as exc:
+            self._music_ok = False
+            log.warning("Не удалось создать аудио-плеер: %s — продолжаю без музыки.", exc)
 
         # -- SFX --
-        self._sfx: Dict[str, QSoundEffect] = {}
-        sounds_cfg: Dict[str, str] = self.storage.settings.get("sounds", {})
+        sounds_cfg: Dict[str, str] = self.storage.settings.get("sounds", {}) or {}
         for name in ("hover", "select", "back"):
             fname = sounds_cfg.get(name, f"{name}.wav")
             path = self._audio_dir / fname
-            eff = QSoundEffect(self)
             try:
+                eff = QSoundEffect(self)
                 if path.exists():
                     eff.setSource(QUrl.fromLocalFile(str(path)))
                     eff.statusChanged.connect(
@@ -550,9 +655,9 @@ class AudioEngine(QObject):
                 else:
                     log.warning("SFX-файл отсутствует: %s — звук '%s' не будет играть.",
                                 path, name)
+                self._sfx[name] = eff
             except Exception as exc:
                 log.warning("Ошибка загрузки SFX '%s': %s", name, exc)
-            self._sfx[name] = eff
 
         self.apply_volumes()
 
@@ -564,15 +669,18 @@ class AudioEngine(QObject):
                         error, error_string)
 
     def _on_sfx_status(self, name: str, status: Any, eff: QSoundEffect) -> None:
-        if status != QSoundEffect.Status.Loaded and status != QSoundEffect.Status.Ready:
+        if status != QSoundEffect.Status.Ready:
             log.warning("SFX '%s' не загружен (status=%s) — не играю.", name, status)
 
     # -- API ------------------------------------------------------------
     def apply_volumes(self) -> None:
+        if not MULTIMEDIA_AVAILABLE:
+            return
         mv = float(self.storage.settings.get("music_volume", 70))
         sv = float(self.storage.settings.get("sfx_volume", 80))
         try:
-            self._music_output.setVolume(max(0.0, min(1.0, mv / 100.0)))
+            if self._music_output is not None:
+                self._music_output.setVolume(max(0.0, min(1.0, mv / 100.0)))
         except Exception as exc:
             log.warning("Не удалось задать громкость музыки: %s", exc)
         for eff in self._sfx.values():
@@ -582,6 +690,11 @@ class AudioEngine(QObject):
                 pass
 
     def start_music(self) -> None:
+        if not MULTIMEDIA_AVAILABLE or self.music_player is None:
+            return
+        if not self._music_ok:
+            log.info("Музыка пропущена: ранее уже была ошибка плагина.")
+            return
         fname = str(self.storage.settings.get("music_file", "menu_theme.mp3"))
         path = self._audio_dir / fname
         if not path.exists():
@@ -598,18 +711,33 @@ class AudioEngine(QObject):
             log.warning("Не удалось запустить музыку: %s", exc)
 
     def reload_music(self) -> None:
+        if not MULTIMEDIA_AVAILABLE or self.music_player is None:
+            return
+        self._music_ok = True  # пользователь мог исправить файл/громкость — даём шанс
         try:
             self.music_player.stop()
         except Exception:
             pass
         self.start_music()
 
+    def shutdown(self) -> None:
+        """Остановить проигрывание перед выходом (музыка не должна «дожидать» процесс)."""
+        if not MULTIMEDIA_AVAILABLE:
+            return
+        try:
+            if self.music_player is not None:
+                self.music_player.stop()
+        except Exception as exc:
+            log.debug("stop music failed: %s", exc)
+
     def play_sfx(self, name: str) -> None:
+        if not MULTIMEDIA_AVAILABLE:
+            return
         eff = self._sfx.get(name)
         if eff is None:
             return
         try:
-            if eff.status() in (QSoundEffect.Status.Loaded, QSoundEffect.Status.Ready):
+            if eff.status() == QSoundEffect.Status.Ready:
                 eff.play()
         except Exception as exc:
             log.debug("SFX '%s' не сыграл: %s", name, exc)
@@ -768,8 +896,8 @@ class GamepadController(QObject):
             left = self._joy.get_axis(0) < -self.deadzone
             right = self._joy.get_axis(0) > self.deadzone
             # В pygame ось Y: -1 = вверх, +1 = вниз. D-pad hat: y=1 вверх.
-            up = self._joy.get_axis(1) > self.deadzone     # stick: down-axis => up
-            down = self._joy.get_axis(1) < -self.deadzone
+            up = self._joy.get_axis(1) < -self.deadzone    # pygame: -1 = вверх
+            down = self._joy.get_axis(1) > self.deadzone   # pygame: +1 = вниз
             try:
                 hx, hy = self._joy.get_hat(0)
                 left = left or hx == -1
@@ -782,9 +910,15 @@ class GamepadController(QObject):
         except Exception as exc:
             # Текущий контроллер отключён mid-poll — переподключение
             log.warning("Чтение геймпада сорвалось (%s) — переподключение.", exc)
+            was = self._joy is not None
             self._detach_joystick()
-            self._hotplug_check()
-            self.gamepad_disconnected.emit()
+            # _hotplug_check сам эмитит disconnected, если контроллеров нет;
+            # эмитим сами только если он нашёл/подключил новый.
+            self._hotplug_check(silent=True)
+            if was and self._joy is not None:
+                pass  # переподключились к другому — connected уже эмитнут внутри
+            elif was:
+                self.gamepad_disconnected.emit()
             return
 
         self._process_directions(states, now)
@@ -814,6 +948,10 @@ class GamepadController(QObject):
         return int(time.monotonic() * 1000)
 
     def _process_directions(self, states: Dict[str, bool], now: int) -> None:
+        # Самовосстановление состояния после hot-plug/ошибки чтения:
+        # словарьDirections должен содержать все 4 направления.
+        for d in self.DIRECTIONS:
+            self._prev.setdefault(d, False)
         signals = {
             "left": self.navigate_left,
             "right": self.navigate_right,
@@ -896,6 +1034,33 @@ class CarouselItem:
     game: Optional[Game] = None
 
 
+def make_add_tile(size: QSize) -> QPixmap:
+    """Nintendo-Switch-подобная «пустая ячейка»: тёмный квадрат с тонкой
+    рамкой и большой плюс-иконкой по центру. Рисуется кодом — ассеты не нужны."""
+    pm = QPixmap(size)
+    pm.fill(Qt.GlobalColor.transparent)
+    try:
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        rect = QRectF(2, 2, size.width() - 4, size.height() - 4)
+        p.setPen(QPen(QColor("#4A2020"), max(2.0, size.width() / 90.0)))
+        p.setBrush(QColor(PANEL))
+        radius = max(6.0, size.width() * 0.08)
+        p.drawRoundedRect(rect, radius, radius)
+        # плюс
+        c = QColor(TEXT2)
+        p.setPen(QPen(c, max(3.0, size.width() / 45.0),
+                      Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        third = size.width() / 3.0
+        cx, cy = size.width() / 2.0, size.height() / 2.0
+        p.drawLine(QPointF(cx - third, cy), QPointF(cx + third, cy))
+        p.drawLine(QPointF(cx, cy - third), QPointF(cx, cy + third))
+        p.end()
+    except Exception as exc:
+        log.warning("Не удалось нарисовать add-тайл: %s", exc)
+    return pm
+
+
 class _Slot(QWidget):
     """Внешний слот карусели: носителе QGraphicsOpacityEffect быть НЕ должно у inner."""
 
@@ -946,15 +1111,26 @@ class _Slot(QWidget):
         v.addWidget(self.desc_label)
 
         self._icon_size = QSize(0, 0)
+        self._icon_item: Optional[CarouselItem] = None
 
     # -- перекомпоновка под новый размер ------------------------------
     def relayout(self, slot_size: QSize, icon_size: QSize, name_h: int, desc_h: int) -> None:
         self.resize(slot_size)
         self.inner.resize(slot_size)
-        if self._icon_size != icon_size:
+        # Перерисовываем иконку при смене размера ИЛИ при смене контента слота
+        # (во время анимации карусели один и тот же слот переиспользуется под
+        #  разные игры — без этого соседний слот показывал бы старую иконку).
+        if self._icon_size != icon_size or self._icon_item is not self.item:
             self._icon_size = icon_size
+            self._icon_item = self.item
             self.icon_label.setFixedSize(icon_size)
-            if self.item.kind == "game" and self.item.game is not None:
+            if self.item.kind == "add":
+                # Nintendo-Switch-подобная пустая ячейка с плюсом (рисуется кодом)
+                pix = make_add_tile(icon_size)
+            elif self.item.kind == "settings":
+                pix = self.assets.pixmap("assets/icons/settings.png", icon_size,
+                                         self.item.title)
+            elif self.item.kind == "game" and self.item.game is not None:
                 g = self.item.game
                 pix = self.assets.pixmap(g.icon or g.cover, icon_size, g.title)
             else:
@@ -980,7 +1156,7 @@ class CarouselWidget(QWidget):
     index_changed = pyqtSignal(int)          # индекс в items (для фона/топа)
     activated = pyqtSignal(int)              # нажатие A/Enter на элементе
 
-    VISIBLE = 3
+    VISIBLE = 5   # нечётное — центральный offset 0 существует всегда, даже при 2 элементах
 
     def __init__(self, assets: AssetLoader, scale: float,
                  parent: Optional[QWidget] = None) -> None:
@@ -990,9 +1166,13 @@ class CarouselWidget(QWidget):
         self.items: List[CarouselItem] = []
         self.index: int = 0
         self._slots: List[_Slot] = []
-        self._pos_anims: Dict[int, QPropertyAnimation] = {}
-        self._op_anims: Dict[int, QPropertyAnimation] = {}
-        self._animating: Dict[int, int] = {}   # logical index -> visible offset
+        # Ключевое исправление: у каждого физического слота хранится ЕГО
+        # визуальный offset (-1 = левый сосед, 0 = центр, +1 = правый сосед).
+        # Раньше код путал индекс в списке _slots с визуальным offset — после
+        # первого wrap подсветка и позиции разъезжались.
+        self._slot_offset: List[int] = []
+        self._pos_anims: List[Optional[QPropertyAnimation]] = []
+        self._op_anims: List[Optional[QPropertyAnimation]] = []
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
     # -- размеры ---------------------------------------------------------
@@ -1014,47 +1194,36 @@ class CarouselWidget(QWidget):
         for s in self._slots:
             s.deleteLater()
         self._slots.clear()
+        self._slot_offset.clear()
         self._pos_anims.clear()
         self._op_anims.clear()
-        self._animating.clear()
         self.items = items
         self.index = start_index % max(1, len(items))
-        n = min(self.VISIBLE, max(1, len(items)))
-        for _ in range(n):
-            self._slots.append(_Slot(CarouselItem("game", ""), self.assets, self.scale, self))
+        # Число слотов: не больше VISIBLE, но и не больше элементов (минимум 3 —
+        # иначе при 1–2 элементах центральный offset 0 мог «уехать» из диапазона).
+        n = min(self.VISIBLE, max(3, len(items)))
+        if n % 2 == 0:
+            n -= 1  # всегда нечётное => offset 0 существует
+        half = n // 2
+        offsets = list(range(-half, n - half))
+        for i in range(n):
+            slot = _Slot(CarouselItem("game", ""), self.assets, self.scale, self)
+            self._slots.append(slot)
+            self._slot_offset.append(offsets[i])
+            self._pos_anims.append(None)
+            self._op_anims.append(None)
         self._rebind_all()
         self.relayout_all()
-
-    def _logical_slot(self, logical: int) -> Optional[_Slot]:
-        if not self.items:
-            return None
-        off = self._offset_of(logical)
-        if off is None:
-            return None
-        return self._slots[off]
-
-    def _offset_of(self, logical: int) -> Optional[int]:
-        """Видимый слот (0..VISIBLE-1), отвечающий за логический индекс сейчас."""
-        if logical in self._animating:
-            return self._animating[logical]
-        if not self.items:
-            return None
-        rel = (logical - self.index) % len(self.items)
-        half = self.VISIBLE // 2
-        if rel <= half and rel < len(self._slots):
-            return rel
-        rel_neg = rel - len(self.items)
-        if -half <= rel_neg and (-rel_neg) < len(self._slots):
-            return -rel_neg
-        return None
 
     def _item_for_logical(self, logical: int) -> CarouselItem:
         return self.items[logical % len(self.items)]
 
     def _rebind_all(self) -> None:
+        """Привязать контент каждого слота по его визуальному offset."""
         m = self.metrics()
         icon_size = QSize(m["icon"], m["icon"])
-        for off, slot in enumerate(self._slots):
+        for i, slot in enumerate(self._slots):
+            off = self._slot_offset[i]
             logical = (self.index + off) % max(1, len(self.items))
             slot.item = self._item_for_logical(logical)
             slot.set_active(off == 0)
@@ -1073,7 +1242,8 @@ class CarouselWidget(QWidget):
     def relayout_all(self) -> None:
         m = self.metrics()
         icon_size = QSize(m["icon"], m["icon"])
-        for off, slot in enumerate(self._slots):
+        for i, slot in enumerate(self._slots):
+            off = self._slot_offset[i]
             slot.relayout(QSize(m["slot_w"], m["slot_h"]), icon_size,
                           m["name_h"], m["desc_h"])
             slot.move(self._target_pos(off))
@@ -1091,85 +1261,91 @@ class CarouselWidget(QWidget):
         self.index = (self.index + delta) % len(self.items)
         if self.index == old:
             return False
-        self._animate_shift(delta)
+        # Эффективный визуальный шаг: при малом числе элементов (n_items < span)
+        # сдвиг на весь span — no-op логически, поэтому берём остаток по модулю.
+        eff = ((delta + len(self.items) // 2) % len(self.items)) - len(self.items) // 2
+        if eff == 0:
+            eff = delta  # например, чётное число элементов и delta=±1 -> eff=∓... не ноль
+        self._animate_shift(eff if eff != 0 else delta)
         self.index_changed.emit(self.index)
         return True
 
     def _animate_shift(self, delta: int) -> None:
+        """Сдвиг карусели. Каждый слот ЕДЕТ на visual_offset - delta; слот,
+        вылетевший за край, телепортируется на противоположную сторону с новым
+        контентом (до старта анимации, чтобы не был виден «прыжок»)."""
         m = self.metrics()
         icon_size = QSize(m["icon"], m["icon"])
         slot_size = QSize(m["slot_w"], m["slot_h"])
         n_slots = len(self._slots)
+        n_items = max(1, len(self.items))
         duration = 250
-        new_animating: Dict[int, int] = {}
+        # Диапазон допустимых визуальных offset'ов: [-half, +half]
+        half = n_slots // 2
+        valid = set(range(-half, n_slots - half))
+        span = 2 * half + 1  # количество визуальных позиций
 
-        # Сбрасываем карту «анимируемых» индексов — построим заново
-        self._animating.clear()
+        def logical_for_offset(off: int) -> int:
+            return (self.index + off) % n_items
 
-        for old_off in range(n_slots):
-            slot = self._slots[old_off]
-            # Слот едет в сторону, противоположную сдвигу индекса
+        for i, slot in enumerate(self._slots):
+            old_off = self._slot_offset[i]
             final_off = old_off - delta
-            if final_off < 0 or final_off >= n_slots:
-                # Вылетел за край — мгновенный телепорт на противоположную сторону
-                wrapped_off = ((final_off % n_slots) + n_slots) % n_slots
-                new_logical = (self.index + wrapped_off) % len(self.items)
-                slot.item = self._item_for_logical(new_logical)
+            if final_off not in valid:
+                # Вылетел за край — телепорт ровно на один span в сторону въезда.
+                wrapped_off = final_off + span * (1 if delta > 0 else -1)
+                assert wrapped_off in valid, f"wrap math broken: {wrapped_off}"
+                # Если элементов меньше слотов, несколько соседей показывают один
+                # и тот же item — это допустимо; дубликат offset'а невозможен,
+                # т.к. каждый слот сдвигается синхронно на один и тот же delta.
+                self._slot_offset[i] = wrapped_off
+                slot.item = self._item_for_logical(logical_for_offset(wrapped_off))
                 slot.set_active(wrapped_off == 0)
                 slot.relayout(slot_size, icon_size, m["name_h"], m["desc_h"])
-                slot.move(self._target_pos(wrapped_off))
-                new_animating[new_logical] = wrapped_off
-                continue
-            new_logical = (self.index + final_off) % len(self.items)
-            new_animating[new_logical] = final_off
-            # Позиция — анимируется на внешнем _slot (у него opacity-эффект, это ок)
-            self._kill_anim(id(slot), "pos")
+                # Встать в стартовую точку за краем экрана, затем анимировать внутрь
+                slot.move(self._target_pos(wrapped_off + delta))
+                final_off = wrapped_off
+            else:
+                self._slot_offset[i] = final_off
+
+            # Позиция анимируется на внешнем _slot (на нём opacity-эффект).
+            self._kill_anim(i, "pos")
             anim = QPropertyAnimation(slot, b"pos", self)
             anim.setDuration(duration)
             anim.setStartValue(slot.pos())
             anim.setEndValue(self._target_pos(final_off))
             anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-            anim.finished.connect(
-                lambda s=slot, lg=new_logical: self._finish_move(s, lg))
-            self._pos_anims[id(slot)] = anim
+            self._pos_anims[i] = anim
             anim.start()
 
-        self._animating = new_animating
-
-        # прозрачность: центральный слот (оффсет 0) → 1.0, остальные → 0.4
-        for off, slot in enumerate(self._slots):
+        # Прозрачность и свечение — по ЦЕЛЕВОМУ визульному offset слота,
+        # а не по его индексу в списке (прежний баг: подсветка оставалась на
+        # физически «центральном в списке» слоте после wrap).
+        for i, slot in enumerate(self._slots):
+            off = self._slot_offset[i]
             target_op = 1.0 if off == 0 else 0.4
             eff = slot.opacity_effect
-            self._kill_anim(id(slot), "op")
+            self._kill_anim(i, "op")
             a = QPropertyAnimation(eff, b"opacity", self)
             a.setDuration(duration)
             a.setStartValue(eff.opacity())
             a.setEndValue(target_op)
             a.setEasingCurve(QEasingCurve.Type.OutCubic)
-            self._op_anims[id(slot)] = a
+            self._op_anims[i] = a
             a.start()
-        # свечение — сразу на слоте с оффсетом 0
-        for off, slot in enumerate(self._slots):
             slot.set_active(off == 0)
 
-    def _finish_move(self, slot: _Slot, logical: int) -> None:
-        # Обновить контент, когда слот доехал до целевой позиции
-        item = self._item_for_logical(logical)
-        if (slot.item.kind != item.kind or slot.item.title != item.title
-                or slot.item.game is not item.game):
-            m = self.metrics()
-            slot.item = item
-            slot.relayout(QSize(m["slot_w"], m["slot_h"]),
-                          QSize(m["icon"], m["icon"]), m["name_h"], m["desc_h"])
-
-    def _kill_anim(self, key: int, _kind: str) -> None:
-        store = self._pos_anims if _kind == "pos" else self._op_anims
-        old = store.pop(key, None)
+    def _kill_anim(self, idx: int, kind: str) -> None:
+        store = self._pos_anims if kind == "pos" else self._op_anims
+        if idx >= len(store):
+            return
+        old = store[idx]
         if old is not None:
             try:
                 old.stop()
             except Exception:
                 pass
+            store[idx] = None
 
     # -- активация -----------------------------------------------------------
     def current_item(self) -> Optional[CarouselItem]:
@@ -1533,24 +1709,66 @@ class SettingsDialog(QDialog):
         t.setObjectName("dialogTitle")
         v.addWidget(t)
 
-        self.btn_min = QPushButton("Свернуть в Windows", page)
-        self.btn_restart = QPushButton("Перезагрузить ПК", page)
-        self.btn_shutdown = QPushButton("Выключить ПК", page)
-        self.btn_min.clicked.connect(self._minimize_to_windows)
-        self.btn_restart.clicked.connect(lambda: self._power("restart"))
+        # Порядок кнопок — как в меню питания PS4/Switch:
+        # Выключить / Перезагрузить / Сон / Выйти в Windows / Настройки Windows
+        self.btn_shutdown = QPushButton("⏻  Выключить ПК", page)
+        self.btn_restart = QPushButton("⟳  Перезагрузить ПК", page)
+        self.btn_sleep = QPushButton("☾  Спящий режим", page)
+        self.btn_min = QPushButton("▶  Выйти в оболочку Windows", page)
+        self.btn_win_settings = QPushButton("Открыть «Параметры Windows»", page)
         self.btn_shutdown.clicked.connect(lambda: self._power("shutdown"))
-        for b in (self.btn_min, self.btn_restart, self.btn_shutdown):
+        self.btn_restart.clicked.connect(lambda: self._power("restart"))
+        self.btn_sleep.clicked.connect(self._sleep)
+        self.btn_min.clicked.connect(self._minimize_to_windows)
+        self.btn_win_settings.clicked.connect(self._open_windows_settings)
+        for b in (self.btn_shutdown, self.btn_restart, self.btn_sleep,
+                  self.btn_min, self.btn_win_settings):
             v.addWidget(b)
 
-        note = QLabel("Перезагрузка/выключение отменимы командой shutdown /a "
+        note = QLabel("Выключение/перезагрузка отменяемы командой shutdown /a "
                       "в течение 5 секунд.", page)
         note.setObjectName("hint")
         note.setWordWrap(True)
         v.addWidget(note)
         v.addStretch(1)
-        self._power_widgets: List[QWidget] = [self.btn_min, self.btn_restart,
-                                               self.btn_shutdown]
+        self._power_widgets: List[QWidget] = [self.btn_shutdown, self.btn_restart,
+                                               self.btn_sleep, self.btn_min,
+                                               self.btn_win_settings]
         return page
+
+    def _open_windows_settings(self) -> None:
+        err = run_power_command(["start", "ms-settings:"])
+        if err:
+            QMessageBox.warning(self, "Ошибка", f"Не удалось открыть Параметры:\n{err}")
+
+    def _sleep(self) -> None:
+        """Спящий режим без пароля: SetSuspendState через ctypes (только Windows).
+        Fallback — блокировка экрана (LockWorkStation), после которой сон
+        наступает по системным настройкам бездействия."""
+        answer = QMessageBox.question(
+            self, "Сон",
+            "Перевести компьютер в спящий режим?\n"
+            "(Пробуждение — любая кнопка геймпада/клавиатуры или питание ПК.)",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        suspended = False
+        try:
+            import ctypes
+            # SetSuspendState(bHibernate=F, bForce=Suspend, bWakeupEventsDisabled=F)
+            ok = ctypes.windll.powrprof.SetSuspendState(0, 1, 0)  # type: ignore[attr-defined]
+            suspended = bool(ok)
+            log.info("SetSuspendState вернул: %s", ok)
+        except Exception as exc:
+            log.warning("ctypes-сон недоступен: %s", exc)
+        if suspended:
+            return
+        err = run_power_command(["rundll32.exe", "user32.dll,LockWorkStation"])
+        if err:
+            QMessageBox.warning(self, "Сон",
+                                f"Не удалось выполнить команду:\n{err}\n"
+                                "Альтернатива: Win+X → U → S или меню Пуск → Завершение работы.")
 
     def _on_music_volume(self, value: int) -> None:
         self.storage.update_setting("music_volume", value)
@@ -1595,27 +1813,9 @@ class SettingsDialog(QDialog):
             return
         args = ["shutdown", "/r", "/t", "5"] if mode == "restart" \
             else ["shutdown", "/s", "/t", "5"]
-        try:
-            proc = subprocess.Popen(args)
-        except Exception as exc:
-            log.error("Не удалось запустить %s: %s", args, exc)
-            QMessageBox.warning(self, "Ошибка",
-                                f"Не удалось выполнить команду:\n{exc}")
-            return
-        check = QTimer(self)
-        check.setSingleShot(True)
-
-        def on_check() -> None:
-            rc = proc.poll()
-            if rc not in (0, None):
-                log.error("shutdown вернул код %s (возможно, блокировка GPO).", rc)
-                QMessageBox.warning(
-                    self, "Ошибка",
-                    f"Windows отказала в команде (код {rc}).\n"
-                    "Возможно, политика группы запрещает выключение из этого аккаунта.")
-
-        check.timeout.connect(on_check)
-        check.start(700)
+        err = run_power_command(args)
+        if err:
+            QMessageBox.warning(self, "Ошибка", err)
 
     def _select_tab(self, i: int) -> None:
         self._tab_i = max(0, min(i, len(self.TABS) - 1))
@@ -1705,3 +1905,669 @@ class SettingsDialog(QDialog):
         self._save_timer.stop()
         self._flush_settings()
         super().done(result)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# MainWindow — полноэкранный лаунчер: топ-панель, фон, карусель, роутинг ввода
+# ──────────────────────────────────────────────────────────────────────────────
+class MainWindow(QWidget):
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("Ardor Gaming")
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+
+        # --- модель / сервисы ---
+        self.storage = StorageManager()
+        self.assets = AssetLoader()
+        self.audio = AudioEngine(self.storage, self)
+
+        screen = QApplication.primaryScreen()
+        geo = screen.availableGeometry() if screen else QRect(0, 0, 1920, 1080)
+        self._base_w = max(geo.width(), 1)
+        # Масштаб: базовый 1080p; при разрешении < 1280×720 — минимум 0.6
+        self.scale: float = max(0.6, min(2.0, self._base_w / 1920.0))
+
+        self.active_dialog: Optional[QDialog] = None  # AddGameDialog | SettingsDialog
+        self._game_proc: Optional[subprocess.Popen] = None
+        self._cursor_hidden = False
+
+        # --- фон (за каруселью) ---
+        self.background = BackgroundCrossfade(self.assets, self)
+        # Фон стартует с реального размера окна: иначе первый кроссфейд
+        # предрассчитает pixmap для 1x1 и фон будет растянутым/чёрным.
+        geo0 = screen.availableGeometry() if screen else QRect(0, 0, 1920, 1080)
+        self.background.setGeometry(0, 0, geo0.width(), geo0.height())
+
+        # --- центральная область ---
+        central = QWidget(self)
+        self.central = central
+        central.setObjectName("centralArea")
+        central.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        central.setStyleSheet("#centralArea { background: transparent; }")
+
+        self.top_bar = QFrame(central)
+        self.top_bar.setObjectName("panel")
+        self.top_bar.setFixedHeight(int(round(72 * self.scale)))
+
+        top_l = QHBoxLayout(self.top_bar)
+        m = int(round(20 * self.scale))
+        top_l.setContentsMargins(m, 0, m, 0)
+        top_l.setSpacing(m)
+
+        logo = QLabel("ARDOR GAMING", self.top_bar)
+        logo.setObjectName("logo")
+        top_l.addWidget(logo)
+        top_l.addStretch(1)
+
+        self.lbl_active = QLabel("", self.top_bar)
+        self.lbl_active.setObjectName("activeTitle")
+        self.lbl_active.setWordWrap(False)
+        self.lbl_active.setMinimumWidth(int(300 * self.scale))
+        self.lbl_active.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        top_l.addWidget(self.lbl_active, 4)
+        top_l.addStretch(1)
+
+        # статус геймпада: PNG-иконка (без emoji) + имя контроллера
+        self.gp_icon = QLabel(self.top_bar)
+        self.gp_icon.setFixedSize(int(28 * self.scale), int(28 * self.scale))
+        self.gp_icon.setStyleSheet("background: transparent;")
+        top_l.addWidget(self.gp_icon)
+        self.gp_status = QLabel("Нет геймпада", self.top_bar)
+        self.gp_status.setObjectName("statusText")
+        top_l.addWidget(self.gp_status)
+
+        self.clock = QLabel("--:--", self.top_bar)
+        self.clock.setObjectName("clock")
+        top_l.addWidget(self.clock)
+
+        net = QLabel("Wi-Fi", self.top_bar)
+        net.setObjectName("statusText")
+        top_l.addWidget(net)
+        batt = QLabel("100%", self.top_bar)
+        batt.setObjectName("statusText")
+        top_l.addWidget(batt)
+
+        # Кнопка ⏻ Питание (иконка power.png / power.svg из assets/icons,
+        # при отсутствии — текстовый символ). Открывает меню: Выключить /
+        # Перезагрузить / Сон / Выйти в Windows.
+        self.btn_power = QPushButton("", self.top_bar)
+        self.btn_power.setObjectName("powerButton")
+        self.btn_power.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_power.clicked.connect(self._power_menu)
+        icon_sz = int(30 * self.scale)
+        pm = None
+        for fname in ("power.svg", "power.png"):
+            fpath = ASSETS_DIR / "icons" / fname
+            if fpath.exists():
+                candidate = self.assets.pixmap(f"assets/icons/{fname}",
+                                               QSize(icon_sz, icon_sz), "")
+                if not candidate.isNull():
+                    pm = candidate
+                    break
+        if pm is not None:
+            self.btn_power.setIcon(QIcon(pm))
+            self.btn_power.setIconSize(QSize(icon_sz, icon_sz))
+        else:
+            self.btn_power.setText("⏻")
+        top_l.addWidget(self.btn_power)
+
+        # часы — QTimer 1 сек
+        self._clock_timer = QTimer(self)
+        self._clock_timer.setInterval(1000)
+        self._clock_timer.timeout.connect(self._update_clock)
+        self._clock_timer.start()
+        self._update_clock()
+
+        # --- карусель ---
+        self.carousel = CarouselWidget(self.assets, self.scale, central)
+        self.carousel.index_changed.connect(self._on_index_changed)
+        self.carousel.activated.connect(self._on_activated)
+
+        v = QVBoxLayout(central)
+        v.setContentsMargins(int(24 * self.scale), int(24 * self.scale),
+                             int(24 * self.scale), int(24 * self.scale))
+        v.setSpacing(int(16 * self.scale))
+        v.addWidget(self.top_bar)
+        v.addWidget(self.carousel, 1)
+
+        # --- toast-уведомления (не QMessageBox, п. «Индикация в UI») ---
+        self.toast = QLabel("", self)
+        self.toast.setObjectName("toast")
+        self.toast.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.toast.setWordWrap(True)
+        self.toast.hide()
+        self._toast_timer = QTimer(self)
+        self._toast_timer.setSingleShot(True)
+        self._toast_timer.timeout.connect(self.toast.hide)
+
+        # --- скрытие курсора при бездействии мыши (3 сек) ---
+        self.setMouseTracking(True)
+        self._idle_cursor_timer = QTimer(self)
+        self._idle_cursor_timer.setSingleShot(True)
+        self._idle_cursor_timer.setInterval(3000)
+        self._idle_cursor_timer.timeout.connect(self._hide_cursor)
+
+        # --- геймпад (MainWindow не знает про pygame напрямую) ---
+        self.gamepad = GamepadController(self.storage, self)
+        gp = self.gamepad
+        gp.navigate_left.connect(lambda: self._on_navigate(-1))
+        gp.navigate_right.connect(lambda: self._on_navigate(+1))
+        gp.navigate_up.connect(self._on_gp_up)
+        gp.navigate_down.connect(self._on_gp_down)
+        gp.confirm.connect(self._on_confirm)
+        gp.back.connect(self._on_back)
+        gp.open_settings.connect(self._open_settings)
+        gp.open_add_game.connect(self._open_add_game)
+        gp.emergency_exit.connect(self._emergency_exit)
+        gp.gamepad_connected.connect(self._on_gp_connected)
+        gp.gamepad_disconnected.connect(self._on_gp_disconnected)
+        self._refresh_gamepad_ui()
+
+        self._rebuild_carousel()
+        self.resize(geo.size())
+
+    # ======================================================================
+    # Сборка карусели
+    # ======================================================================
+    def _make_items(self) -> List[CarouselItem]:
+        items = [CarouselItem("game", g.title, g.description, g) for g in self.storage.games]
+        if not items:
+            # Пустая библиотека (как на Nintendo Switch): только «ячейка» добавления.
+            items.append(CarouselItem("add", "Добавить игру", "Добавьте первую игру"))
+            return items
+        items.append(CarouselItem("settings", "Настройки", "Звук, экран, питание"))
+        items.append(CarouselItem("add", "Добавить игру", "Новая игра в библиотеку"))
+        return items
+
+    def _rebuild_carousel(self, keep_index: bool = True) -> None:
+        old = self.carousel.index if keep_index and self.carousel.items else 0
+        items = self._make_items()
+        start = min(old, len(items) - 1) if len(items) else 0
+        if not self.storage.games:
+            # пустая библиотека — сразу подсвечена кнопка «Добавить игру» (п.5)
+            start = next((i for i, it in enumerate(items) if it.kind == "add"), 0)
+        self.carousel.set_items(items, start)
+        self._update_active_title()
+        self._update_background()
+
+    # ======================================================================
+    # Слоты карусели
+    # ======================================================================
+    def _current_item(self) -> Optional[CarouselItem]:
+        return self.carousel.current_item()
+
+    def _current_game(self) -> Optional[Game]:
+        it = self._current_item()
+        return it.game if (it is not None and it.kind == "game") else None
+
+    def _on_index_changed(self, _index: int) -> None:
+        self.audio.play_sfx("hover")   # только edge-trigger (автоповтор — без звука)
+        self._update_active_title()
+        self._update_background()
+
+    def _update_active_title(self) -> None:
+        it = self._current_item()
+        text = it.title if it else ""
+        avail = max(120, int(self._base_w * 0.32))
+        fm = QFontMetrics(self.lbl_active.font())
+        elided = fm.elidedText(text, Qt.TextElideMode.ElideRight, avail)
+        self.lbl_active.setText(elided)
+        self.lbl_active.setToolTip(text)
+
+    def _update_background(self) -> None:
+        g = self._current_game()
+        path = ""
+        if g is not None:
+            path = g.background or g.cover or g.icon
+        self.background.set_background(path)
+
+    def _on_activated(self, index: int) -> None:
+        if self.active_dialog is not None:
+            return
+        items = self.carousel.items
+        if not items or index >= len(items):
+            return
+        item = items[index]
+        if item.kind == "settings":
+            self._open_settings()
+        elif item.kind == "add":
+            self._open_add_game()
+        else:
+            self._game_options(item.game)
+
+    # ======================================================================
+    # Меню игры (как на PS4/Switch): Играть / Удалить / Отмена
+    # ======================================================================
+    def _game_options(self, game: Optional[Game]) -> None:
+        if game is None:
+            return
+        box = QMessageBox(self)
+        box.setWindowTitle(game.title)
+        box.setText(f"{game.title}\n{game.description}".strip())
+        b_play = box.addButton("▶  Играть", QMessageBox.ButtonRole.AcceptRole)
+        b_del = box.addButton("🗑  Удалить игру", QMessageBox.ButtonRole.DestructiveRole)
+        b_cancel = box.addButton("Отмена", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is b_play:
+            self.launch_game(game)
+        elif clicked is b_del:
+            answer = QMessageBox.question(
+                self, "Удаление",
+                f"Удалить «{game.title}» из библиотеки?\n"
+                "(Файлы игры на диске останутся нетронутыми.)",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if answer == QMessageBox.StandardButton.Yes:
+                self.storage.remove_game(game.id)
+                self._rebuild_carousel(keep_index=False)
+                self.show_toast(f"«{game.title}» удалена из библиотеки")
+
+    # ======================================================================
+    # Роутинг ввода: активный диалог получает всё, иначе — карусель
+    # ======================================================================
+    def _dialog_accepts_nav(self) -> bool:
+        d = self.active_dialog
+        return d is not None and isinstance(d, (AddGameDialog, SettingsDialog)) \
+            and d.isVisible()
+
+    def _on_navigate(self, delta: int) -> None:
+        d = self.active_dialog
+        if self._dialog_accepts_nav() and isinstance(d, SettingsDialog):
+            d.gp_left() if delta < 0 else d.gp_right()
+            return
+        if self._dialog_accepts_nav():
+            return  # ←/→ не используется в AddGameDialog
+        changed = self.carousel.navigate(delta)
+        if not changed:
+            pass
+
+    def _on_gp_up(self) -> None:
+        d = self.active_dialog
+        if self._dialog_accepts_nav():
+            d.gp_up()  # type: ignore[attr-defined]
+        # на Home вертикальная навигация не нужна (один ряд карусели)
+
+    def _on_gp_down(self) -> None:
+        d = self.active_dialog
+        if self._dialog_accepts_nav():
+            d.gp_down()  # type: ignore[attr-defined]
+
+    def _on_confirm(self) -> None:
+        d = self.active_dialog
+        if self._dialog_accepts_nav():
+            d.gp_confirm()  # type: ignore[attr-defined]
+            return
+        self.carousel.activate_current()
+
+    def _on_back(self) -> None:
+        d = self.active_dialog
+        if d is not None and d.isVisible():
+            self.audio.play_sfx("back")
+            d.gp_back()  # type: ignore[attr-defined]
+            # Диалог закрыт (visible=False), но его сигнал finished придёт только
+            # в следующем витке event loop — сбрасываем состояние сразу, чтобы
+            # следующее нажатие не уткнулось в «висящий» диалог.
+            if self.active_dialog is d and not d.isVisible():
+                self._close_dialog(d)
+            return
+        # B/Escape на Home → диалог «Выход / Свернуть / Отмена»
+        self._home_back_dialog()
+
+    def _quit_app(self) -> None:
+        """Корректное завершение: стоп музыка + pygame quit (closeEvent не всегда
+        вызывается при QApplication.quit из модального диалога)."""
+        try:
+            self.audio.shutdown()
+        except Exception:
+            pass
+        try:
+            self.gamepad.shutdown()
+            if PYGAME_AVAILABLE:
+                pygame.joystick.quit()
+                pygame.quit()
+        except Exception:
+            pass
+        QApplication.quit()
+
+    def _home_back_dialog(self) -> None:
+        box = QMessageBox(self)
+        box.setWindowTitle("Ardor Gaming")
+        box.setText("Что сделать?")
+        b_exit = box.addButton("Выход из лаунчера", QMessageBox.ButtonRole.AcceptRole)
+        b_min = box.addButton("Свернуть в Windows", QMessageBox.ButtonRole.ActionRole)
+        b_cancel = box.addButton("Отмена", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is b_exit:
+            self._quit_app()
+        elif clicked is b_min:
+            self.showMinimized()
+
+    # ======================================================================
+    # Меню питания (как на PS4): вызывается кнопкой ⏻ на верхней панели
+    # ======================================================================
+    def _power_menu(self) -> None:
+        box = QMessageBox(self)
+        box.setWindowTitle("Питание")
+        box.setText("Выберите действие:")
+        b_shutdown = box.addButton("⏻  Выключить ПК", QMessageBox.ButtonRole.AcceptRole)
+        b_restart = box.addButton("⟳  Перезагрузить", QMessageBox.ButtonRole.ActionRole)
+        b_sleep = box.addButton("☾  Спящий режим", QMessageBox.ButtonRole.ActionRole)
+        b_windows = box.addButton("▶  Выйти в оболочку Windows",
+                                  QMessageBox.ButtonRole.ActionRole)
+        b_cancel = box.addButton("Отмена", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked in (b_shutdown, b_restart):
+            mode = "shutdown" if clicked is b_shutdown else "restart"
+            label = "выключить" if mode == "shutdown" else "перезагрузить"
+            answer = QMessageBox.question(
+                self, "Подтверждение",
+                f"Вы уверены, что хотите {label} компьютер?\n"
+                "Действие можно отменить командой shutdown /a в течение 5 секунд.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if answer == QMessageBox.StandardButton.Yes:
+                args = ["shutdown", "/s", "/t", "5"] if mode == "shutdown" \
+                    else ["shutdown", "/r", "/t", "5"]
+                err = run_power_command(args)
+                if err:
+                    QMessageBox.warning(self, "Ошибка", err)
+        elif clicked is b_sleep:
+            # переиспользуем логику сна из SettingsDialog (без открытия всего диалога)
+            answer = QMessageBox.question(
+                self, "Сон",
+                "Перевести компьютер в спящий режим?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes)
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            suspended = False
+            try:
+                import ctypes
+                ok = ctypes.windll.powrprof.SetSuspendState(0, 1, 0)  # type: ignore[attr-defined]
+                suspended = bool(ok)
+            except Exception as exc:
+                log.warning("ctypes-сон недоступен: %s", exc)
+            if not suspended:
+                err = run_power_command(["rundll32.exe", "user32.dll,LockWorkStation"])
+                if err:
+                    QMessageBox.warning(self, "Сон", err)
+        elif clicked is b_windows:
+            self.showMinimized()
+
+    # ======================================================================
+    # Диалоги
+    # ======================================================================
+    def _open_settings(self) -> None:
+        if self.active_dialog is not None:
+            return
+        self.audio.play_sfx("select")
+        dlg = SettingsDialog(self.storage, self.audio, self.scale, self)
+        dlg.settings_changed.connect(self._on_settings_changed)
+        self.active_dialog = dlg
+        dlg.finished.connect(lambda _r: self._close_dialog(dlg))
+        dlg.show()
+
+    def _open_add_game(self) -> None:
+        if self.active_dialog is not None:
+            return
+        self.audio.play_sfx("select")
+        dlg = AddGameDialog(self.scale, self.assets, self)
+        dlg.game_added.connect(self._on_game_added)
+        self.active_dialog = dlg
+        dlg.finished.connect(lambda _r: self._close_dialog(dlg))
+        dlg.show()
+
+    def _close_dialog(self, dlg: QDialog) -> None:
+        if self.active_dialog is dlg:
+            self.active_dialog = None
+        dlg.deleteLater()
+        self.activateWindow()
+        self.setFocus()
+
+    def _on_game_added(self, game: Game) -> None:
+        self.storage.add_game(game)
+        # стартуем на новой игре, обновляем карусель без перезапуска
+        self._rebuild_carousel(keep_index=False)
+        n = len(self.carousel.items)
+        new_idx = next((i for i, it in enumerate(self.carousel.items)
+                        if it.kind == "game" and it.game is game), n - 3 if n >= 3 else 0)
+        self.carousel.index = new_idx % max(1, n)
+        self.carousel._rebind_all()
+        self.carousel.relayout_all()
+        self._update_active_title()
+        self._update_background()
+        self.show_toast(f"Игра добавлена: {game.title}")
+
+    def _on_settings_changed(self) -> None:
+        self.gamepad.apply_config()
+        self.audio.reload_music()
+        self._refresh_gamepad_ui()
+
+    # ======================================================================
+    # Запуск игры + возврат из сворачивания
+    # ======================================================================
+    def launch_game(self, game: Optional[Game]) -> None:
+        if game is None:
+            return
+        exe = Path(game.exe_path)
+        try:
+            exists = exe.exists()
+        except Exception:
+            exists = False
+        if not exists:
+            QMessageBox.warning(
+                self, "Игра не найдена",
+                f"Файл не существует:\n{game.exe_path}\n\n"
+                "Проверьте путь в games.json или пересоздайте запись.")
+            return
+        try:
+            self._game_proc = subprocess.Popen(
+                [game.exe_path], cwd=os.path.dirname(game.exe_path))
+            log.info("Запущена игра '%s' (pid=%s)", game.title, self._game_proc.pid)
+        except Exception as exc:
+            log.error("Не удалось запустить %s: %s", game.exe_path, exc)
+            QMessageBox.warning(self, "Ошибка запуска", str(exc))
+            self._game_proc = None
+            return
+        self.audio.play_sfx("select")
+        self.showMinimized()          # консольный сценарий
+        self._watch_proc_timer = QTimer(self)
+        self._watch_proc_timer.setInterval(1000)
+        self._watch_proc_timer.timeout.connect(self._check_proc)
+        self._watch_proc_timer.start()
+
+    def _check_proc(self) -> None:
+        proc = self._game_proc
+        if proc is None:
+            self._watch_proc_timer.stop()
+            return
+        try:
+            finished = proc.poll() is not None
+        except Exception:
+            finished = True
+        if finished:
+            self._watch_proc_timer.stop()
+            self._game_proc = None
+            QTimer.singleShot(500, self._restore_fullscreen)
+
+    def _restore_fullscreen(self) -> None:
+        self.showFullScreen()
+        self.raise_()
+        self.activateWindow()
+        self.setFocus()
+        self.show_toast("Возврат в лаунчер")
+
+    # ======================================================================
+    # Аварийный выход / закрытие
+    # ======================================================================
+    def _emergency_exit(self) -> None:
+        if self.active_dialog is not None:
+            return
+        answer = QMessageBox.question(
+            self, "Выход",
+            "Выйти из лаунчера в Windows?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if answer == QMessageBox.StandardButton.Yes:
+            self._quit_app()
+
+    # ======================================================================
+    # Геймпад-индикация и toast
+    # ======================================================================
+    def _refresh_gamepad_ui(self) -> None:
+        connected = self.gamepad.connected
+        name = self.gamepad.joy_name if connected else "Нет геймпада"
+        self.gp_status.setText(name)
+        color = "#33CC66" if connected else TEXT2
+        self.gp_status.setStyleSheet(
+            f"color: {color}; font-size: {int(14 * self.scale)}px; background: transparent;")
+        icon_file = "gamepad_connected.png" if connected else "gamepad_disconnected.png"
+        pm = self.assets.pixmap(f"assets/icons/{icon_file}",
+                               QSize(int(28 * self.scale), int(28 * self.scale)),
+                               "GAMEPAD")
+        self.gp_icon.setPixmap(pm)
+
+    def _on_gp_connected(self, name: str) -> None:
+        self._refresh_gamepad_ui()
+        self.show_toast(f"Геймпад подключён: {name}")
+
+    def _on_gp_disconnected(self) -> None:
+        self._refresh_gamepad_ui()
+        self.show_toast("Геймпад отключён")
+
+    def show_toast(self, text: str, ms: int = 2000) -> None:
+        self.toast.setText(text)
+        self.toast.adjustSize()
+        tw = min(self.toast.width(), int(self._base_w * 0.7))
+        self.toast.setFixedWidth(tw)
+        self.toast.adjustSize()
+        x = (self.width() - self.toast.width()) // 2
+        self.toast.move(x, int(90 * self.scale))
+        self.toast.show()
+        self.toast.raise_()
+        self._toast_timer.start(ms)
+
+    def _update_clock(self) -> None:
+        self.clock.setText(datetime.now().strftime("%H:%M"))
+
+    # ======================================================================
+    # Раскладка (ручная для фона; центральный контейнер — на весь экран)
+    # ======================================================================
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self.background.setGeometry(0, 0, self.width(), self.height())
+        self.central.setGeometry(0, 0, self.width(), self.height())
+        self.background.lower()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self.background.setGeometry(0, 0, self.width(), self.height())
+        self.central.setGeometry(0, 0, self.width(), self.height())
+        self.background.lower()
+
+    # ======================================================================
+    # Клавиатура (fallback)
+    # ======================================================================
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        k = event.key()
+        mods = event.modifiers()
+        if mods & Qt.KeyboardModifier.AltModifier and k == Qt.Key.Key_F4:
+            self._emergency_exit()
+            return
+        if k == Qt.Key.Key_F1:
+            self._open_settings()
+            return
+        if k == Qt.Key.Key_F2:
+            self._open_add_game()
+            return
+        if self._dialog_accepts_nav():
+            d = self.active_dialog
+            if k in (Qt.Key.Key_Up, Qt.Key.Key_W):
+                d.gp_up()  # type: ignore[attr-defined]
+                return
+            if k in (Qt.Key.Key_Down, Qt.Key.Key_S):
+                d.gp_down()  # type: ignore[attr-defined]
+                return
+            if k in (Qt.Key.Key_Left, Qt.Key.Key_A) and isinstance(d, SettingsDialog):
+                d.gp_left()  # type: ignore[attr-defined]
+                return
+            if k in (Qt.Key.Key_Right, Qt.Key.Key_D) and isinstance(d, SettingsDialog):
+                d.gp_right()  # type: ignore[attr-defined]
+                return
+            if k in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                d.gp_confirm()  # type: ignore[attr-defined]
+                return
+            if k in (Qt.Key.Key_Escape, Qt.Key.Key_Backspace):
+                self._on_back()
+                return
+            super().keyPressEvent(event)
+            return
+        if k in (Qt.Key.Key_Left, Qt.Key.Key_A):
+            self._on_navigate(-1)
+        elif k in (Qt.Key.Key_Right, Qt.Key.Key_D):
+            self._on_navigate(+1)
+        elif k in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            self._on_confirm()
+        elif k in (Qt.Key.Key_Escape, Qt.Key.Key_Backspace):
+            self._on_back()
+        else:
+            super().keyPressEvent(event)
+
+    # ======================================================================
+    # Скрытие курсора при бездействии мыши
+    # ======================================================================
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if self._cursor_hidden:
+            QApplication.restoreOverrideCursor()
+            self._cursor_hidden = False
+        self._idle_cursor_timer.start()
+        super().mouseMoveEvent(event)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        self._idle_cursor_timer.start()
+        super().mousePressEvent(event)
+
+    def _hide_cursor(self) -> None:
+        if not self._cursor_hidden:
+            QApplication.setOverrideCursor(Qt.CursorShape.BlankCursor)
+            self._cursor_hidden = True
+
+    # ======================================================================
+    # Закрытие окна — корректный teardown pygame
+    # ======================================================================
+    def closeEvent(self, event) -> None:  # noqa: N802
+        try:
+            self.gamepad.shutdown()
+            if PYGAME_AVAILABLE:
+                pygame.joystick.quit()
+                pygame.quit()
+        except Exception as exc:
+            log.debug("pygame quit: %s", exc)
+        if self._cursor_hidden:
+            QApplication.restoreOverrideCursor()
+            self._cursor_hidden = False
+        try:
+            self.audio.shutdown()
+        except Exception:
+            pass
+        log.info("Лаунчер закрыт.")
+        super().closeEvent(event)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Bootstrap
+# ──────────────────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    app = QApplication(sys.argv)
+    app.setApplicationName("Ardor Gaming")
+    mw = MainWindow()
+    mw.setStyleSheet(build_qss(mw.scale))
+    mw.showFullScreen()
+    mw.audio.start_music()
+    sys.exit(app.exec())
